@@ -694,7 +694,7 @@ export const REPORT_CONFIGS: ReportConfig[] = [
 ]
 
 // All reports are now implemented — nothing coming soon
-export const COMING_SOON: never[] = []
+export const COMING_SOON: Array<{ id: string; name: string; theme: string; question: string; mvp: 2 | 3 }> = []
 
 export const AUDIT_ENTITY_OPTIONS = Object.values(MASTER_LABELS).concat(['Promo']).sort()
 export const AUDIT_ACTION_OPTIONS = [

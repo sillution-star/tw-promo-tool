@@ -134,15 +134,6 @@ function ColumnToggle({ cols, hidden, onToggle, onSelectAll, onDeselectAll, onRe
 
   const visibleCount = cols.filter(c => !hidden.has(c.key)).length
 
-  function toggleGroup(keys: string[]) {
-    const allVisible = keys.every(k => !hidden.has(k))
-    keys.forEach(k => {
-      if (allVisible !== !hidden.has(k)) onToggle(k)
-    })
-    if (allVisible) keys.forEach(k => !hidden.has(k) && onToggle(k))
-    else keys.forEach(k => hidden.has(k) && onToggle(k))
-  }
-
   return (
     <div className="relative" ref={ref}>
       <button

@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { useApp } from '../../store/AppContext'
-import type { BaseMasterEntry, MasterAuditEntry, MasterKey, MastersState } from '../../data/types'
+import type { BaseMasterEntry, MasterAuditEntry, MasterKey } from '../../data/types'
 import { IconX, IconSearch, IconClock, IconCheck, IconUpload, IconAlert } from '../../components/ui/icons'
 import { STATES_CITIES, MANUFACTURERS } from '../../data/seed'
 

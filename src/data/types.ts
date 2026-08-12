@@ -229,6 +229,7 @@ export interface MasterAuditEntry {
 }
 
 export interface BaseMasterEntry {
+  [key: string]: unknown
   id: string
   status: MasterStatus
   createdAt: string

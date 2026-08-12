@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../../store/AppContext'
-import { Button, inputCls } from '../../components/ui/primitives'
+import { Button } from '../../components/ui/primitives'
 import { IconCheck, IconAlert, IconChevronDown, IconCopy } from '../../components/ui/icons'
 import { computeProfit } from '../../lib/profitability'
 import { flatToIRR } from '../../lib/profitability'

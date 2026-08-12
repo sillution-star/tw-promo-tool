@@ -184,8 +184,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: p.name,
         schemeName: p.scheme,
         group: p.group,
+        product: p.product ?? null,
         dealerType: p.dealerType,
         manufacturer: p.manufacturer,
+        manufacturers: p.manufacturer ? [p.manufacturer] : [],
         states: det?.states ?? [p.state],
         cities: det?.cities ?? (p.city ? [p.city] : []),
         salesPointIds: det?.salesPointIds ?? [],
@@ -378,8 +380,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: p.name,
         schemeName: p.scheme,
         group: p.group,
+        product: p.product ?? null,
         dealerType: p.dealerType,
         manufacturer: p.manufacturer,
+        manufacturers: p.manufacturer ? [p.manufacturer] : [],
         states: det?.states ?? [p.state],
         cities: det?.cities ?? (p.city ? [p.city] : []),
         salesPointIds: det?.salesPointIds ?? [],
@@ -567,8 +571,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: '',               // must fill — shown highlighted in Review
         schemeName: p.scheme,
         group: p.group,
+        product: p.product ?? null,
         dealerType: p.dealerType,
         manufacturer: p.manufacturer,
+        manufacturers: p.manufacturer ? [p.manufacturer] : [],
         states: det?.states ?? [p.state],
         cities: det?.cities ?? (p.city ? [p.city] : []),
         salesPointIds: det?.salesPointIds ?? [],
@@ -793,6 +799,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       schemeName: string
       promoName: string
       group: string
+      product?: string | null
       dealerType: 'SBO' | 'MBO'
       salesPointIds: string[]
       modelNames: string[]

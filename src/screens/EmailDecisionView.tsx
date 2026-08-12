@@ -6,7 +6,7 @@
  */
 
 import { useApp } from '../store/AppContext'
-import { Button } from '../components/ui/primitives'
+
 import { IconCheck, IconAlert } from '../components/ui/icons'
 import { computeProfit, detailForPromo } from '../lib/profitability'
 import { flatToIRR } from '../lib/profitability'

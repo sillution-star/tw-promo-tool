@@ -6,7 +6,7 @@ import { StatusPill } from '../components/ui/StatusPill'
 import { computeProfit, detailForPromo } from '../lib/profitability'
 import { flatToIRR } from '../lib/profitability'
 import { formatINR, formatDate } from '../lib/format'
-import { APPROVAL_ROUTING, SALES_POINTS } from '../data/seed'
+import { SALES_POINTS } from '../data/seed'
 import type { Promo, PresetAction } from '../data/types'
 
 const REJECT_REASONS = [
@@ -38,7 +38,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 // ── Edit-approval panel (shown when promo.pendingEdit is set) ─────────────────
 function EditApprovalPanel({ promoId }: { promoId: string }) {
-  const { getPromo, approveEdit, rejectEdit, navigate, startEditPromo, role } = useApp()
+  const { getPromo, approveEdit, rejectEdit, navigate, role } = useApp()
   const promo = getPromo(promoId)!
   const edit = promo.pendingEdit!
 
@@ -271,7 +271,7 @@ function CompareRow({ label, val, changed, good, bad }: {
 }
 
 export function ApproverDecision({ promoId, presetAction }: { promoId: string; presetAction?: PresetAction }) {
-  const { getPromo, approve, reject, undoDecision, revoke, rework, navigate, role } = useApp()
+  const { getPromo, approve, reject, undoDecision, revoke, rework, navigate, startEditPromo, role } = useApp()
   const promo = getPromo(promoId)
 
   // Pre-open the relevant panel when arriving from the email
