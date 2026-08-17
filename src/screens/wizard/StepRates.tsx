@@ -249,6 +249,50 @@ export function StepRates() {
             </Field>
           </div>
 
+          {/* Dealer Subvention */}
+          <Field label="Dealer Subvention" helper="Choose percentage or loan amount — not both.">
+            <div className="grid grid-cols-2 gap-4">
+              <ChargeSelect
+                label="Dealer Sub %"
+                unit="%"
+                options={CHARGE_OPTIONS.subventionPct}
+                value={draft.dealerSubventionPct}
+                disabled={draft.dealerSubventionAmt !== null}
+                onChange={(v) => setDraft((d) => ({ ...d, dealerSubventionPct: v, dealerSubventionAmt: null }))}
+              />
+              <ChargeSelect
+                label="Dealer Sub Amt"
+                unit="₹"
+                options={CHARGE_OPTIONS.subventionAmt}
+                value={draft.dealerSubventionAmt}
+                disabled={draft.dealerSubventionPct !== null}
+                onChange={(v) => setDraft((d) => ({ ...d, dealerSubventionAmt: v, dealerSubventionPct: null }))}
+              />
+            </div>
+          </Field>
+
+          {/* Manufacturer Subvention */}
+          <Field label="Manufacturer Subvention" helper="Choose percentage or loan amount — not both.">
+            <div className="grid grid-cols-2 gap-4">
+              <ChargeSelect
+                label="Mfg Sub %"
+                unit="%"
+                options={CHARGE_OPTIONS.subventionPct}
+                value={draft.mfgSubventionPct}
+                disabled={draft.mfgSubventionAmt !== null}
+                onChange={(v) => setDraft((d) => ({ ...d, mfgSubventionPct: v, mfgSubventionAmt: null }))}
+              />
+              <ChargeSelect
+                label="Mfg Sub Amt"
+                unit="₹"
+                options={CHARGE_OPTIONS.subventionAmt}
+                value={draft.mfgSubventionAmt}
+                disabled={draft.mfgSubventionPct !== null}
+                onChange={(v) => setDraft((d) => ({ ...d, mfgSubventionAmt: v, mfgSubventionPct: null }))}
+              />
+            </div>
+          </Field>
+
           {/* Dealer Payout */}
           <Field label="Dealer Payout %" helper="Inclusive of GST" error={errors.dealerPayout}>
             <div className="relative max-w-xs">

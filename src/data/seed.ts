@@ -118,6 +118,8 @@ export const CHARGE_OPTIONS = {
   pddAmount: [0, 250, 500, 750],
   pffAmount: [0, 500, 1000, 1500],
   lmfAmount: [0, 300, 600, 900],
+  subventionPct: [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5],
+  subventionAmt: [0, 500, 1000, 2000, 3000, 5000],
 }
 
 export const TENURE_OPTIONS = [12, 18, 24, 30, 36, 48]

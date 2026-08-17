@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../../store/AppContext'
 import { Button, Field, inputCls } from '../../components/ui/primitives'
 import { MultiSelect } from '../../components/ui/SearchableSelect'
-import { IconX, IconSearch, IconCheck, IconAlert, IconUpload } from '../../components/ui/icons'
+import { IconX, IconSearch, IconCheck, IconAlert, IconUpload, IconChevronDown } from '../../components/ui/icons'
 import { PerStateCityPanel } from './pickers'
 import {
   SCHEMES,
@@ -57,6 +57,10 @@ interface BulkRow {
   pddAmount: number | null
   pffAmount: number
   lmfAmount: number
+  dealerSubventionPct: number | null
+  dealerSubventionAmt: number | null
+  mfgSubventionPct: number | null
+  mfgSubventionAmt: number | null
   dealerPayout: string
   dmiOn: boolean
   dmiAmount: string
@@ -94,6 +98,10 @@ function makeRow(schemeName: string, group: PromoGroup): BulkRow {
     pddAmount: null,
     pffAmount: 500,
     lmfAmount: 300,
+    dealerSubventionPct: null,
+    dealerSubventionAmt: null,
+    mfgSubventionPct: null,
+    mfgSubventionAmt: null,
     dealerPayout: '4',
     dmiOn: false,
     dmiAmount: '',
@@ -154,6 +162,10 @@ function buildDetail(row: BulkRow): PromoDetail {
     pddAmount: row.pddAmount,
     pffAmount: row.pffAmount,
     lmfAmount: row.lmfAmount,
+    dealerSubventionPct: row.dealerSubventionPct,
+    dealerSubventionAmt: row.dealerSubventionAmt,
+    mfgSubventionPct: row.mfgSubventionPct,
+    mfgSubventionAmt: row.mfgSubventionAmt,
     dealerPayout: parseFloat(row.dealerPayout) || 0,
     dmiOn: row.dmiOn,
     dmiAmount: parseFloat(row.dmiAmount) || 0,
@@ -642,473 +654,581 @@ function PickerPanel({
   )
 }
 
-// ── GridRow ───────────────────────────────────────────────────────────────────
+// ── PromoForm ─────────────────────────────────────────────────────────────────
 
-function GridRow({
+const selCls = 'w-full appearance-none rounded-input border border-border bg-surface py-2.5 pl-3 pr-9 text-sm outline-none transition focus:border-brand/40 focus:ring-2 focus:ring-brand/10'
+
+function PromoForm({
   row,
+  index,
+  total,
   onChange,
   onPickerOpen,
   onDealerTypeChange,
 }: {
   row: BulkRow
+  index: number
+  total: number
   onChange: (id: string, patch: Partial<BulkRow>) => void
   onPickerOpen: (rowId: string, field: PickerField) => void
   onDealerTypeChange: (rowId: string, newType: DealerType | null) => void
 }) {
   const payout = parseFloat(row.dealerPayout) || 0
-
-  const ci = `rounded border px-1.5 py-1 text-xs outline-none focus:border-brand/40 focus:ring-1 focus:ring-brand/10 bg-surface`
-  const sel = `rounded border border-border bg-surface px-1 py-0.5 text-xs outline-none focus:border-brand/40`
+  const sch = SCHEMES.find(s => s.name === row.schemeName)
+  const tenures = sch?.tenures ?? [12, 18, 24, 30, 36, 48]
 
   return (
-    <tr className="border-b border-border last:border-0 hover:bg-cream/20">
-      {/* Scheme + group + live summary */}
-      <td className="px-2 py-2 min-w-[140px]">
-        <div className="flex flex-wrap items-center gap-0.5">
-          <span className="inline-block whitespace-nowrap rounded-full bg-cream px-2 py-0.5 text-[10px] font-medium text-ink">
-            {row.schemeName}
-          </span>
-          <span className={`inline-block whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
-            row.group === 'Manufacturer' ? 'bg-brand/10 text-brand' : 'bg-[#E8F0FE] text-[#1967D2]'
-          }`}>
+    <div className="space-y-5">
+      {/* Scheme header */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-cream px-3 py-1 text-sm font-medium text-ink">
+          {row.schemeName}
+        </span>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+          row.group === 'Manufacturer' ? 'bg-brand/10 text-brand' : 'bg-[#E8F0FE] text-[#1967D2]'
+        }`}>
+          {row.group}
+        </span>
+        <span className="ml-auto text-xs text-muted">Promo {index + 1} of {total}</span>
+      </div>
+
+      {/* ── Dealer Mapping ── */}
+      <section className="rounded-card border border-border bg-surface p-5 space-y-5">
+        <h3 className="text-sm font-medium text-ink">Dealer Mapping</h3>
+
+        <Field label="Dealer Type" required>
+          <div className="flex gap-3">
+            {(['SBO', 'MBO'] as DealerType[]).map(dt => (
+              <button
+                key={dt}
+                type="button"
+                onClick={() => onDealerTypeChange(row.id, row.dealerType === dt ? null : dt)}
+                className={`flex-1 rounded-card border-2 py-3 text-center text-sm font-semibold transition ${
+                  row.dealerType === dt
+                    ? 'border-brand bg-brand/5 text-brand'
+                    : 'border-border bg-surface text-muted hover:border-brand/30 hover:bg-cream/30'
+                }`}
+              >
+                {dt}
+              </button>
+            ))}
+          </div>
+          {!row.dealerType && <p className="mt-1 text-xs text-danger">Required</p>}
+        </Field>
+
+        {row.dealerType && (
+          <Field label="Manufacturer" required>
+            {row.dealerType === 'SBO' ? (
+              <div className="relative">
+                <select
+                  value={row.manufacturers[0] ?? ''}
+                  onChange={e => onChange(row.id, {
+                    manufacturers: e.target.value ? [e.target.value] : [],
+                    cities: [],
+                    salesPointIds: [],
+                    modelNames: [],
+                  })}
+                  className={`${selCls} ${!row.manufacturers[0] ? 'text-muted' : 'text-ink'}`}
+                >
+                  <option value="">Select OEM…</option>
+                  {[...MANUFACTURERS].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {row.manufacturers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {row.manufacturers.map(m => (
+                      <span key={m} className="inline-flex items-center gap-1 rounded-full bg-cream px-2.5 py-1 text-sm text-ink">
+                        {m}
+                        <button
+                          type="button"
+                          onClick={() => onChange(row.id, {
+                            manufacturers: row.manufacturers.filter(x => x !== m),
+                            cities: [],
+                            salesPointIds: [],
+                            modelNames: [],
+                          })}
+                          className="leading-none text-muted hover:text-danger"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onPickerOpen(row.id, 'manufacturers')}
+                  className="inline-flex items-center gap-1.5 rounded-input border border-dashed border-brand/50 px-3 py-1.5 text-sm text-brand hover:bg-cream"
+                >
+                  + Add OEM
+                </button>
+              </div>
+            )}
+            {row.manufacturers.length === 0 && (
+              <p className="mt-1 text-xs text-danger">Required</p>
+            )}
+          </Field>
+        )}
+
+        {row.manufacturers.length > 0 && (
+          <Field label="State">
+            <button
+              type="button"
+              onClick={() => onPickerOpen(row.id, 'states')}
+              className={`${inputCls} flex items-center justify-between text-left ${row.states.length > 0 ? 'text-ink' : 'text-muted'}`}
+            >
+              <span>{row.states.length > 0 ? row.states.join(', ') : 'Select states…'}</span>
+              <IconChevronDown width={16} height={16} className="shrink-0 text-muted" />
+            </button>
+          </Field>
+        )}
+
+        {row.manufacturers.length > 0 && (
+          <Field label="Dealers" required>
+            <button
+              type="button"
+              onClick={() => onPickerOpen(row.id, 'dealers')}
+              className={`${inputCls} flex items-center justify-between text-left ${row.salesPointIds.length > 0 ? 'text-ink' : 'text-muted'}`}
+            >
+              <span>
+                {row.salesPointIds.length > 0
+                  ? `${row.salesPointIds.length} dealer${row.salesPointIds.length !== 1 ? 's' : ''} selected`
+                  : 'Select dealers…'}
+              </span>
+              <IconChevronDown width={16} height={16} className="shrink-0 text-muted" />
+            </button>
+            {row.salesPointIds.length === 0 && <p className="mt-1 text-xs text-danger">Required</p>}
+          </Field>
+        )}
+
+        {row.manufacturers.length > 0 && (
+          <Field label="Models" required>
+            <button
+              type="button"
+              onClick={() => onPickerOpen(row.id, 'models')}
+              className={`${inputCls} flex items-center justify-between text-left ${row.modelNames.length > 0 ? 'text-ink' : 'text-muted'}`}
+            >
+              <span>
+                {row.modelNames.length > 0
+                  ? `${row.modelNames.length} model${row.modelNames.length !== 1 ? 's' : ''} selected`
+                  : 'Select models…'}
+              </span>
+              <IconChevronDown width={16} height={16} className="shrink-0 text-muted" />
+            </button>
+            {row.modelNames.length === 0 && <p className="mt-1 text-xs text-danger">Required</p>}
+          </Field>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Valid From">
+            <input
+              type="date"
+              value={row.validFrom}
+              onChange={e => onChange(row.id, { validFrom: e.target.value })}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Valid To">
+            <input
+              type="date"
+              value={row.validTo}
+              min={row.validFrom || undefined}
+              onChange={e => onChange(row.id, { validTo: e.target.value })}
+              className={inputCls}
+            />
+          </Field>
+        </div>
+      </section>
+
+      {/* ── Loan & Rate ── */}
+      <section className="rounded-card border border-border bg-surface p-5 space-y-5">
+        <h3 className="text-sm font-medium text-ink">Loan &amp; Rate</h3>
+        {sch && (
+          <p className="text-xs text-muted">
+            {sch.name}: ₹{sch.minAmount.toLocaleString('en-IN')} – ₹{sch.maxAmount.toLocaleString('en-IN')} · ROI {sch.roiMin}–{sch.roiMax}%
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Min Amount Financed">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+              <input
+                type="number"
+                value={row.minAmount}
+                onChange={e => onChange(row.id, { minAmount: e.target.value })}
+                className={`${inputCls} pl-7 font-mono`}
+              />
+            </div>
+          </Field>
+          <Field label="Max Amount Financed">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+              <input
+                type="number"
+                value={row.maxAmount}
+                onChange={e => onChange(row.id, { maxAmount: e.target.value })}
+                className={`${inputCls} pl-7 font-mono`}
+              />
+            </div>
+          </Field>
+          <Field label="Min Tenure" helper={sch ? `Allowed: ${sch.tenures.join(', ')} mo.` : undefined}>
+            <div className="relative">
+              <select
+                value={row.minTenure}
+                onChange={e => {
+                  const v = parseInt(e.target.value)
+                  const patch: Partial<BulkRow> = { minTenure: v }
+                  if (v >= row.maxTenure) {
+                    const nextMax = tenures.find(t => t > v)
+                    if (nextMax) patch.maxTenure = nextMax
+                  }
+                  onChange(row.id, patch)
+                }}
+                className={`${selCls} text-ink`}
+              >
+                {tenures.map(t => <option key={t} value={t}>{t} months</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </Field>
+          <Field label="Max Tenure" helper={sch ? `Allowed: ${sch.tenures.join(', ')} mo.` : undefined}>
+            <div className="relative">
+              <select
+                value={row.maxTenure}
+                onChange={e => {
+                  const v = parseInt(e.target.value)
+                  const patch: Partial<BulkRow> = { maxTenure: v }
+                  if (v <= row.minTenure) {
+                    const prevMin = [...tenures].reverse().find(t => t < v)
+                    if (prevMin) patch.minTenure = prevMin
+                  }
+                  onChange(row.id, patch)
+                }}
+                className={`${selCls} text-ink`}
+              >
+                {tenures.map(t => <option key={t} value={t}>{t} months</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </Field>
+        </div>
+        <Field label="Flat Rate %" helper={sch ? `Scheme range: ${sch.roiMin}–${sch.roiMax}%` : undefined}>
+          <div className="relative max-w-xs">
+            <input
+              type="number"
+              step="0.1"
+              value={row.flatRate}
+              onChange={e => onChange(row.id, { flatRate: e.target.value })}
+              className={`${inputCls} pr-8 font-mono`}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
+          </div>
+        </Field>
+      </section>
+
+      {/* ── Charges & Payouts ── */}
+      <section className="rounded-card border border-border bg-surface p-5 space-y-5">
+        <h3 className="text-sm font-medium text-ink">Charges &amp; Payouts</h3>
+
+        <Field label="Processing Fee (PF)" helper="Choose percentage or amount — not both.">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <select
+                value={row.pfPct ?? ''}
+                disabled={row.pfAmount !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { pfPct: v, pfAmount: v !== null ? null : row.pfAmount })
+                }}
+                className={`${selCls} ${row.pfAmount !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.pfPct === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">PF %</option>
+                {CHARGE_OPTIONS.pfPct.map(v => <option key={v} value={v}>{v}%</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+            <div className="relative">
+              <select
+                value={row.pfAmount ?? ''}
+                disabled={row.pfPct !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { pfAmount: v, pfPct: v !== null ? null : row.pfPct })
+                }}
+                className={`${selCls} ${row.pfPct !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.pfAmount === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">PF ₹</option>
+                {CHARGE_OPTIONS.pfAmount.map(v => <option key={v} value={v}>₹{v}</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </div>
+        </Field>
+
+        <Field label="PDD" helper="Choose percentage or amount — not both.">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <select
+                value={row.pddPct ?? ''}
+                disabled={row.pddAmount !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { pddPct: v, pddAmount: v !== null ? null : row.pddAmount })
+                }}
+                className={`${selCls} ${row.pddAmount !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.pddPct === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">PDD %</option>
+                {CHARGE_OPTIONS.pddPct.map(v => <option key={v} value={v}>{v}%</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+            <div className="relative">
+              <select
+                value={row.pddAmount ?? ''}
+                disabled={row.pddPct !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { pddAmount: v, pddPct: v !== null ? null : row.pddPct })
+                }}
+                className={`${selCls} ${row.pddPct !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.pddAmount === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">PDD ₹</option>
+                {CHARGE_OPTIONS.pddAmount.map(v => <option key={v} value={v}>₹{v}</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </div>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="PFF Amount">
+            <div className="relative">
+              <select
+                value={row.pffAmount}
+                onChange={e => onChange(row.id, { pffAmount: parseFloat(e.target.value) })}
+                className={`${selCls} text-ink`}
+              >
+                {CHARGE_OPTIONS.pffAmount.map(v => <option key={v} value={v}>₹{v}</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </Field>
+          <Field label="LMF Amount">
+            <div className="relative">
+              <select
+                value={row.lmfAmount}
+                onChange={e => onChange(row.id, { lmfAmount: parseFloat(e.target.value) })}
+                className={`${selCls} text-ink`}
+              >
+                {CHARGE_OPTIONS.lmfAmount.map(v => <option key={v} value={v}>₹{v}</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </Field>
+        </div>
+
+        <Field label="Dealer Subvention" helper="Choose percentage or loan amount — not both.">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <select
+                value={row.dealerSubventionPct ?? ''}
+                disabled={row.dealerSubventionAmt !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { dealerSubventionPct: v, dealerSubventionAmt: v !== null ? null : row.dealerSubventionAmt })
+                }}
+                className={`${selCls} ${row.dealerSubventionAmt !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.dealerSubventionPct === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">Dealer Sub %</option>
+                {CHARGE_OPTIONS.subventionPct.map(v => <option key={v} value={v}>{v}%</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+            <div className="relative">
+              <select
+                value={row.dealerSubventionAmt ?? ''}
+                disabled={row.dealerSubventionPct !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { dealerSubventionAmt: v, dealerSubventionPct: v !== null ? null : row.dealerSubventionPct })
+                }}
+                className={`${selCls} ${row.dealerSubventionPct !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.dealerSubventionAmt === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">Dealer Sub ₹</option>
+                {CHARGE_OPTIONS.subventionAmt.map(v => <option key={v} value={v}>₹{v}</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </div>
+        </Field>
+
+        <Field label="Manufacturer Subvention" helper="Choose percentage or loan amount — not both.">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <select
+                value={row.mfgSubventionPct ?? ''}
+                disabled={row.mfgSubventionAmt !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { mfgSubventionPct: v, mfgSubventionAmt: v !== null ? null : row.mfgSubventionAmt })
+                }}
+                className={`${selCls} ${row.mfgSubventionAmt !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.mfgSubventionPct === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">Mfg Sub %</option>
+                {CHARGE_OPTIONS.subventionPct.map(v => <option key={v} value={v}>{v}%</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+            <div className="relative">
+              <select
+                value={row.mfgSubventionAmt ?? ''}
+                disabled={row.mfgSubventionPct !== null}
+                onChange={e => {
+                  const v = e.target.value !== '' ? parseFloat(e.target.value) : null
+                  onChange(row.id, { mfgSubventionAmt: v, mfgSubventionPct: v !== null ? null : row.mfgSubventionPct })
+                }}
+                className={`${selCls} ${row.mfgSubventionPct !== null ? 'cursor-not-allowed bg-cream/60 text-muted' : row.mfgSubventionAmt === null ? 'text-muted' : 'text-ink'}`}
+              >
+                <option value="">Mfg Sub ₹</option>
+                {CHARGE_OPTIONS.subventionAmt.map(v => <option key={v} value={v}>₹{v}</option>)}
+              </select>
+              <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+            </div>
+          </div>
+        </Field>
+
+        <Field label="Dealer Payout %" helper="Inclusive of GST">
+          <div className="relative max-w-xs">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="10"
+              value={row.dealerPayout}
+              onChange={e => {
+                if (parseFloat(e.target.value) > 10) return
+                onChange(row.id, { dealerPayout: e.target.value })
+              }}
+              className={`${inputCls} pr-8 font-mono ${payout > 5 ? 'border-amber-400 bg-amber-50 text-[#B45309]' : ''}`}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
+          </div>
+          {payout > 5 && payout <= 10 && (
+            <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-[#B45309]">
+              <IconAlert width={12} height={12} /> High payout — please recheck.
+            </p>
+          )}
+        </Field>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-ink">DM Referral Incentive (DMI)</div>
+              <div className="text-xs text-muted">An extra incentive paid to the referring DM.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange(row.id, { dmiOn: !row.dmiOn })}
+              className={`relative h-6 w-11 rounded-full transition-colors ${row.dmiOn ? 'bg-brand' : 'bg-[#D8D0BF]'}`}
+            >
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${row.dmiOn ? 'left-[22px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          {row.dmiOn && (
+            <div className="mt-3 max-w-xs">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+                <input
+                  type="number"
+                  value={row.dmiAmount}
+                  onChange={e => onChange(row.id, { dmiAmount: e.target.value })}
+                  placeholder="DMI amount"
+                  className={`${inputCls} pl-7 font-mono`}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Field label="Advance EMI" helper="Value shown in SFDC. No charge impact.">
+          <div className="relative max-w-xs">
+            <select
+              value={row.advanceEmi}
+              onChange={e => onChange(row.id, { advanceEmi: Number(e.target.value) })}
+              className={`${selCls} text-ink`}
+            >
+              {[0, 1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={15} height={15} />
+          </div>
+        </Field>
+
+        <div className="flex items-center gap-3 rounded-input bg-cream/60 px-4 py-3">
+          <span className="text-sm text-muted">Live margin:</span>
+          <MarginBadge row={row} />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// ── ReadOnlyGridRow ───────────────────────────────────────────────────────────
+
+type ReviewRow = BulkRow & { margin: number | null; benchmark: number; breached: boolean; highPayout: boolean; detail: PromoDetail }
+
+function ReadOnlyGridRow({ row, onEdit }: { row: ReviewRow; onEdit: () => void }) {
+  const payout = parseFloat(row.dealerPayout) || 0
+  const thCls = 'px-2 py-2.5 text-xs text-ink'
+  return (
+    <tr className={`border-b border-border last:border-0 ${row.breached ? 'bg-warning-bg/20' : 'hover:bg-cream/20'}`}>
+      <td className="px-2 py-2 min-w-[150px]">
+        <div className="flex flex-wrap gap-0.5 mb-0.5">
+          <span className="rounded-full bg-cream px-2 py-0.5 text-[10px] font-medium text-ink">{row.schemeName}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${row.group === 'Manufacturer' ? 'bg-brand/10 text-brand' : 'bg-[#E8F0FE] text-[#1967D2]'}`}>
             {row.group === 'Manufacturer' ? 'MFR' : 'COMP'}
           </span>
         </div>
-        {(() => {
-          const parts = [
-            row.manufacturers.length > 0 ? row.manufacturers.join(', ') : null,
-            row.dealerType,
-            row.states.length > 0 ? row.states.join(', ') : null,
-            row.cities.length > 0 ? `${row.cities.length} cit${row.cities.length === 1 ? 'y' : 'ies'}` : null,
-            row.salesPointIds.length > 0 ? `${row.salesPointIds.length} SP${row.salesPointIds.length !== 1 ? 's' : ''}` : null,
-            row.modelNames.length > 0 ? `${row.modelNames.length} model${row.modelNames.length !== 1 ? 's' : ''}` : null,
-          ].filter(Boolean)
-          return parts.length > 0 ? (
-            <div className="mt-0.5 max-w-[130px] break-words text-[9px] leading-snug text-muted">
-              {parts.join(' · ')}
-            </div>
-          ) : null
-        })()}
+        <button type="button" onClick={onEdit} className="text-[10px] font-medium text-brand hover:underline">Edit ↗</button>
       </td>
-
-      {/* Dealer Type — SBO / MBO */}
-      <td className="px-1 py-1 text-center">
-        <div className="flex gap-0.5 justify-center">
-          {(['SBO', 'MBO'] as DealerType[]).map(dt => (
-            <button
-              key={dt}
-              type="button"
-              onClick={() => onDealerTypeChange(row.id, row.dealerType === dt ? null : dt)}
-              className={`rounded px-2 py-0.5 text-[10px] font-semibold transition ${
-                row.dealerType === dt
-                  ? 'bg-brand text-white'
-                  : 'bg-[#ECE7DA] text-muted hover:bg-[#E0D8C8]'
-              }`}
-            >
-              {dt}
-            </button>
-          ))}
-        </div>
-        {!row.dealerType && (
-          <div className="mt-0.5 text-[9px] text-danger">Required</div>
-        )}
+      <td className={`${thCls} text-center`}>{row.dealerType ?? <span className="text-[10px] text-danger">—</span>}</td>
+      <td className={`${thCls} min-w-[90px]`}>{row.manufacturers.join(', ') || '—'}</td>
+      <td className={`${thCls} text-muted`}>{row.states.length > 0 ? row.states.join(', ') : '—'}</td>
+      <td className={`${thCls} whitespace-nowrap`}>{row.validFrom || '—'}</td>
+      <td className={`${thCls} whitespace-nowrap`}>{row.validTo || '—'}</td>
+      <td className={`${thCls} text-center`}>{row.salesPointIds.length || <span className="text-[10px] text-danger">0</span>}</td>
+      <td className={`${thCls} text-center`}>{row.modelNames.length || <span className="text-[10px] text-danger">0</span>}</td>
+      <td className={`${thCls} font-mono whitespace-nowrap`}>₹{parseInt(row.minAmount).toLocaleString('en-IN')}</td>
+      <td className={`${thCls} font-mono whitespace-nowrap`}>₹{parseInt(row.maxAmount).toLocaleString('en-IN')}</td>
+      <td className={`${thCls} text-center`}>{row.minTenure}m</td>
+      <td className={`${thCls} text-center`}>{row.maxTenure}m</td>
+      <td className={`${thCls} font-mono text-center`}>{row.flatRate}%</td>
+      <td className={`${thCls} text-center`}>{row.pfPct !== null ? `${row.pfPct}%` : row.pfAmount !== null ? `₹${row.pfAmount}` : '—'}</td>
+      <td className={`${thCls} text-center`}>{row.pddPct !== null ? `${row.pddPct}%` : row.pddAmount !== null ? `₹${row.pddAmount}` : '—'}</td>
+      <td className={`${thCls} text-center`}>₹{row.pffAmount}</td>
+      <td className={`${thCls} text-center`}>₹{row.lmfAmount}</td>
+      <td className={`${thCls} text-center`}>
+        {row.dealerSubventionPct !== null && row.dealerSubventionPct !== undefined ? `${row.dealerSubventionPct}%` : row.dealerSubventionAmt !== null && row.dealerSubventionAmt !== undefined ? `₹${row.dealerSubventionAmt}` : <span className="text-muted">—</span>}
       </td>
-
-      {/* Manufacturer — SBO: single inline select · MBO: removable chips + add */}
-      <td className="px-1 py-1 min-w-[130px]">
-        {row.dealerType === null ? (
-          <span className="text-[10px] text-muted/60 italic">← pick type</span>
-        ) : row.dealerType === 'SBO' ? (
-          <select
-            value={row.manufacturers[0] ?? ''}
-            onChange={e => onChange(row.id, {
-              manufacturers: e.target.value ? [e.target.value] : [],
-              cities: [],
-              salesPointIds: [],
-              modelNames: [],
-            })}
-            className="w-full rounded border border-border bg-surface px-1 py-0.5 text-xs outline-none focus:border-brand/40"
-          >
-            <option value="">Select OEM…</option>
-            {[...MANUFACTURERS].map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        ) : (
-          <div className="space-y-0.5">
-            {row.manufacturers.length > 0 && (
-              <div className="flex flex-wrap gap-0.5">
-                {row.manufacturers.map(m => (
-                  <span
-                    key={m}
-                    className="inline-flex items-center gap-0.5 rounded-full bg-cream px-1.5 py-0 text-[9px] text-ink"
-                  >
-                    {m}
-                    <button
-                      type="button"
-                      onClick={() => onChange(row.id, {
-                        manufacturers: row.manufacturers.filter(x => x !== m),
-                        cities: [],
-                        salesPointIds: [],
-                        modelNames: [],
-                      })}
-                      className="ml-0.5 text-muted hover:text-danger leading-none"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => onPickerOpen(row.id, 'manufacturers')}
-              className="inline-flex items-center gap-0.5 rounded border border-dashed border-brand/40 px-1.5 py-0.5 text-[10px] text-brand hover:bg-cream"
-            >
-              + Add OEM
-            </button>
+      <td className={`${thCls} text-center`}>
+        {row.mfgSubventionPct !== null && row.mfgSubventionPct !== undefined ? `${row.mfgSubventionPct}%` : row.mfgSubventionAmt !== null && row.mfgSubventionAmt !== undefined ? `₹${row.mfgSubventionAmt}` : <span className="text-muted">—</span>}
+      </td>
+      <td className={`${thCls} text-center`}>
+        <span className={`font-mono ${payout > 5 ? 'font-semibold text-[#B45309]' : ''}`}>{row.dealerPayout}%</span>
+        {row.highPayout && <div className="text-[9px] text-[#B45309]">High</div>}
+      </td>
+      <td className={`${thCls} text-center`}>{row.dmiOn ? `₹${row.dmiAmount || '—'}` : <span className="text-muted">Off</span>}</td>
+      <td className={`${thCls} text-center`}>{row.advanceEmi}</td>
+      <td className="px-2 py-2">
+        {row.margin !== null ? (
+          <div className="text-right leading-tight">
+            <div className={`text-[11px] font-semibold ${row.breached ? 'text-danger' : 'text-success'}`}>{row.margin.toFixed(1)}%</div>
+            <div className="text-[9px] text-muted">b:{row.benchmark}%</div>
+            {row.breached && <div className="text-[9px] font-semibold text-danger">breach</div>}
           </div>
-        )}
-      </td>
-
-      {/* State */}
-      <td className="px-1 py-1 text-center">
-        <button
-          type="button"
-          onClick={() => onPickerOpen(row.id, 'states')}
-          className="inline-flex items-center gap-0.5 whitespace-nowrap rounded border border-border bg-surface px-2 py-1 text-xs text-brand hover:bg-cream"
-        >
-          {row.states.length > 0 ? <>{row.states.length} ▸</> : <>+ Add</>}
-        </button>
-        {row.states.length > 0 && (
-          <div className="mt-0.5 flex flex-wrap gap-0.5 justify-center">
-            {row.states.slice(0, 2).map(s => (
-              <span key={s} className="rounded-full bg-cream px-1.5 py-0 text-[9px] text-muted">{s}</span>
-            ))}
-            {row.states.length > 2 && (
-              <span className="text-[9px] text-muted">+{row.states.length - 2}</span>
-            )}
-          </div>
-        )}
-      </td>
-
-      {/* Valid From */}
-      <td className="px-1 py-1">
-        <input
-          type="date"
-          value={row.validFrom}
-          onChange={e => onChange(row.id, { validFrom: e.target.value })}
-          className={`${ci} border-border`}
-        />
-      </td>
-
-      {/* Valid To */}
-      <td className="px-1 py-1">
-        <input
-          type="date"
-          value={row.validTo}
-          min={row.validFrom || undefined}
-          onChange={e => onChange(row.id, { validTo: e.target.value })}
-          className={`${ci} border-border`}
-        />
-      </td>
-
-      {/* Dealers */}
-      <td className="px-1 py-1 text-center">
-        <button
-          type="button"
-          onClick={() => onPickerOpen(row.id, 'dealers')}
-          className="inline-flex items-center gap-0.5 whitespace-nowrap rounded border border-border bg-surface px-2 py-1 text-xs text-brand hover:bg-cream"
-        >
-          {row.salesPointIds.length > 0 ? (
-            <>{row.salesPointIds.length} ▸</>
-          ) : (
-            <>+ Add</>
-          )}
-        </button>
-      </td>
-
-      {/* Models */}
-      <td className="px-1 py-1 text-center">
-        <button
-          type="button"
-          onClick={() => onPickerOpen(row.id, 'models')}
-          className="inline-flex items-center gap-0.5 whitespace-nowrap rounded border border-border bg-surface px-2 py-1 text-xs text-brand hover:bg-cream"
-        >
-          {row.modelNames.length > 0 ? (
-            <>{row.modelNames.length} ▸</>
-          ) : (
-            <>+ Add</>
-          )}
-        </button>
-      </td>
-
-      {/* Loan Min */}
-      <td className="px-1 py-1">
-        <input
-          type="number"
-          value={row.minAmount}
-          onChange={e => onChange(row.id, { minAmount: e.target.value })}
-          className={`${ci} w-20 border-border`}
-        />
-      </td>
-
-      {/* Loan Max */}
-      <td className="px-1 py-1">
-        <input
-          type="number"
-          value={row.maxAmount}
-          onChange={e => onChange(row.id, { maxAmount: e.target.value })}
-          className={`${ci} w-20 border-border`}
-        />
-      </td>
-
-      {/* Tenure Min */}
-      <td className="px-1 py-1">
-        {(() => {
-          const tenures = SCHEMES.find(s => s.name === row.schemeName)?.tenures ?? [12, 18, 24, 30, 36, 48]
-          return (
-            <select
-              value={row.minTenure}
-              onChange={e => {
-                const v = parseInt(e.target.value)
-                const patch: Partial<BulkRow> = { minTenure: v }
-                if (v >= row.maxTenure) {
-                  const nextMax = tenures.find(t => t > v)
-                  if (nextMax) patch.maxTenure = nextMax
-                }
-                onChange(row.id, patch)
-              }}
-              className={sel}
-            >
-              {tenures.map(t => (
-                <option key={t} value={t}>{t}m</option>
-              ))}
-            </select>
-          )
-        })()}
-      </td>
-
-      {/* Tenure Max */}
-      <td className="px-1 py-1">
-        {(() => {
-          const tenures = SCHEMES.find(s => s.name === row.schemeName)?.tenures ?? [12, 18, 24, 30, 36, 48]
-          return (
-            <select
-              value={row.maxTenure}
-              onChange={e => {
-                const v = parseInt(e.target.value)
-                const patch: Partial<BulkRow> = { maxTenure: v }
-                if (v <= row.minTenure) {
-                  const prevMin = [...tenures].reverse().find(t => t < v)
-                  if (prevMin) patch.minTenure = prevMin
-                }
-                onChange(row.id, patch)
-              }}
-              className={sel}
-            >
-              {tenures.map(t => (
-                <option key={t} value={t}>{t}m</option>
-              ))}
-            </select>
-          )
-        })()}
-      </td>
-
-      {/* Flat Rate % — scheme ROI range shown as hint */}
-      <td className="px-1 py-1">
-        {(() => {
-          const sch = SCHEMES.find(s => s.name === row.schemeName)
-          return (
-            <div className="flex flex-col items-center gap-0.5">
-              <input
-                type="number"
-                step="0.1"
-                value={row.flatRate}
-                onChange={e => onChange(row.id, { flatRate: e.target.value })}
-                className={`${ci} w-14 border-border`}
-              />
-              {sch && (
-                <span className="text-[9px] text-muted">{sch.roiMin}–{sch.roiMax}%</span>
-              )}
-            </div>
-          )
-        })()}
-      </td>
-
-      {/* PF — mutually exclusive % / ₹ */}
-      <td className="px-1 py-1">
-        <div className="flex flex-col gap-0.5">
-          <select
-            value={row.pfPct ?? ''}
-            title="PF %"
-            onChange={e => {
-              const v = e.target.value !== '' ? parseFloat(e.target.value) : null
-              onChange(row.id, { pfPct: v, pfAmount: v !== null ? null : row.pfAmount })
-            }}
-            className={sel}
-          >
-            <option value="">—%</option>
-            {CHARGE_OPTIONS.pfPct.map(v => (
-              <option key={v} value={v}>
-                {v}%
-              </option>
-            ))}
-          </select>
-          <select
-            value={row.pfAmount ?? ''}
-            title="PF ₹"
-            onChange={e => {
-              const v = e.target.value !== '' ? parseFloat(e.target.value) : null
-              onChange(row.id, { pfAmount: v, pfPct: v !== null ? null : row.pfPct })
-            }}
-            className={sel}
-          >
-            <option value="">—₹</option>
-            {CHARGE_OPTIONS.pfAmount.map(v => (
-              <option key={v} value={v}>
-                ₹{v}
-              </option>
-            ))}
-          </select>
-        </div>
-      </td>
-
-      {/* PDD — mutually exclusive % / ₹ */}
-      <td className="px-1 py-1">
-        <div className="flex flex-col gap-0.5">
-          <select
-            value={row.pddPct ?? ''}
-            title="PDD %"
-            onChange={e => {
-              const v = e.target.value !== '' ? parseFloat(e.target.value) : null
-              onChange(row.id, { pddPct: v, pddAmount: v !== null ? null : row.pddAmount })
-            }}
-            className={sel}
-          >
-            <option value="">—%</option>
-            {CHARGE_OPTIONS.pddPct.map(v => (
-              <option key={v} value={v}>
-                {v}%
-              </option>
-            ))}
-          </select>
-          <select
-            value={row.pddAmount ?? ''}
-            title="PDD ₹"
-            onChange={e => {
-              const v = e.target.value !== '' ? parseFloat(e.target.value) : null
-              onChange(row.id, { pddAmount: v, pddPct: v !== null ? null : row.pddPct })
-            }}
-            className={sel}
-          >
-            <option value="">—₹</option>
-            {CHARGE_OPTIONS.pddAmount.map(v => (
-              <option key={v} value={v}>
-                ₹{v}
-              </option>
-            ))}
-          </select>
-        </div>
-      </td>
-
-      {/* PFF */}
-      <td className="px-1 py-1">
-        <select
-          value={row.pffAmount}
-          onChange={e => onChange(row.id, { pffAmount: parseFloat(e.target.value) })}
-          className={sel}
-        >
-          {CHARGE_OPTIONS.pffAmount.map(v => (
-            <option key={v} value={v}>
-              ₹{v}
-            </option>
-          ))}
-        </select>
-      </td>
-
-      {/* LMF */}
-      <td className="px-1 py-1">
-        <select
-          value={row.lmfAmount}
-          onChange={e => onChange(row.id, { lmfAmount: parseFloat(e.target.value) })}
-          className={sel}
-        >
-          {CHARGE_OPTIONS.lmfAmount.map(v => (
-            <option key={v} value={v}>
-              ₹{v}
-            </option>
-          ))}
-        </select>
-      </td>
-
-      {/* Dealer Payout — amber >5%, blocked >10% */}
-      <td className="px-1 py-1">
-        <div className="flex flex-col items-center gap-0.5">
-          <input
-            type="number"
-            step="0.1"
-            min="0"
-            max="10"
-            value={row.dealerPayout}
-            onChange={e => {
-              if (parseFloat(e.target.value) > 10) return
-              onChange(row.id, { dealerPayout: e.target.value })
-            }}
-            className={`${ci} w-14 text-center ${
-              payout > 5 ? 'border-amber-400 bg-amber-50 text-[#B45309]' : 'border-border'
-            }`}
-          />
-          {payout > 5 && payout <= 10 ? (
-            <span className="text-[9px] font-semibold text-[#B45309]">High</span>
-          ) : (
-            <span className="text-[9px] text-muted">incl.GST</span>
-          )}
-        </div>
-      </td>
-
-      {/* DMI toggle + optional amount */}
-      <td className="px-1 py-1">
-        <div className="flex flex-col items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onChange(row.id, { dmiOn: !row.dmiOn })}
-            className={`rounded px-2 py-0.5 text-[10px] font-semibold transition ${
-              row.dmiOn
-                ? 'bg-brand text-white'
-                : 'bg-[#ECE7DA] text-muted hover:bg-[#E0D8C8]'
-            }`}
-          >
-            {row.dmiOn ? 'On' : 'Off'}
-          </button>
-          {row.dmiOn && (
-            <input
-              type="number"
-              value={row.dmiAmount}
-              onChange={e => onChange(row.id, { dmiAmount: e.target.value })}
-              placeholder="₹"
-              className={`${ci} w-14 border-border text-center`}
-            />
-          )}
-        </div>
-      </td>
-
-      {/* Advance EMI */}
-      <td className="px-1 py-1">
-        <select
-          value={row.advanceEmi}
-          onChange={e => onChange(row.id, { advanceEmi: Number(e.target.value) })}
-          className={`${sel} w-12`}
-        >
-          {[0, 1, 2, 3, 4].map(n => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </td>
-
-      {/* Margin — live, color-coded */}
-      <td className="px-2 py-1">
-        <MarginBadge row={row} />
+        ) : <span className="text-[10px] text-muted">—</span>}
       </td>
     </tr>
   )
@@ -1136,11 +1256,12 @@ function BulkSchemeFlow({
   )
   const [activePicker, setActivePicker] = useState<PickerTarget>(null)
   const [cityPanelRowId, setCityPanelRowId] = useState<string | null>(null)
-  const [stage, setStage] = useState<'grid' | 'review' | 'done'>('grid')
+  const [stage, setStage] = useState<'form' | 'review' | 'done'>('form')
+  const [formIndex, setFormIndex] = useState(0)
   const [breachReasons, setBreachReasons] = useState<Record<string, string>>({})
   const [createdCount, setCreatedCount] = useState(0)
 
-  // When scheme/group selection changes, sync rows (preserve existing data) and reset to grid stage
+  // When scheme/group selection changes, sync rows (preserve existing data) and reset to form stage
   useEffect(() => {
     setRows(prev =>
       selectedSchemes.flatMap(s => selectedGroups.map(g => {
@@ -1148,7 +1269,8 @@ function BulkSchemeFlow({
         return existing ?? makeRow(s, g)
       }))
     )
-    setStage('grid')
+    setStage('form')
+    setFormIndex(0)
   }, [selectedSchemes, selectedGroups])
 
   const [pendingSBOConfirm, setPendingSBOConfirm] = useState<{ rowId: string; currentMfrs: string[] } | null>(null)
@@ -1219,7 +1341,6 @@ function BulkSchemeFlow({
     return !!row.dealerType && row.manufacturers.length > 0 && row.salesPointIds.length > 0 && row.modelNames.length > 0 && payout > 0 && payout <= 10 && datesOk
   }
   const gridValid = rows.every(rowReady) && nameIsValid
-  const readyCount = rows.filter(rowReady).length
 
   // Compute review data once (used for both Review UI and final submit)
   const reviewData = useMemo(
@@ -1282,7 +1403,8 @@ function BulkSchemeFlow({
           <Button
             variant="secondary"
             onClick={() => {
-              setStage('grid')
+              setStage('form')
+              setFormIndex(0)
               setBreachReasons({})
             }}
           >
@@ -1297,142 +1419,107 @@ function BulkSchemeFlow({
   // ── REVIEW ────────────────────────────────────────────────────────────────
 
   if (stage === 'review') {
+    const thCls = 'border-b border-border bg-cream/60 px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wide text-muted whitespace-nowrap'
     return (
       <div className="space-y-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="font-serif text-xl text-ink">
-              Review {rows.length} promo{rows.length > 1 ? 's' : ''}
-            </h2>
-            <p className="mt-0.5 text-sm text-muted">
-              Confirm each promo before creating.
-              {breachCount > 0 && (
-                <span className="ml-1 text-[#B45309]">
-                  {breachCount} breach{breachCount > 1 ? 'es' : ''} — a reason is required for
-                  each.
-                </span>
-              )}
+        <div>
+          <h2 className="font-serif text-xl text-ink">
+            Review {rows.length} promo{rows.length > 1 ? 's' : ''}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted">
+            Check all details before creating. Click <strong>Edit ↗</strong> on any row to go back and change it.
+            {breachCount > 0 && (
+              <span className="ml-1 text-[#B45309]">
+                {breachCount} breach{breachCount > 1 ? 'es' : ''} — fill a reason for each below.
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Read-only grid */}
+        <div className="overflow-x-auto rounded-card border border-border">
+          <table className="min-w-max border-collapse text-xs">
+            <thead>
+              <tr>
+                <th className={thCls} rowSpan={2}>Scheme</th>
+                <th className={thCls} rowSpan={2}>Type</th>
+                <th className={thCls} rowSpan={2}>Manufacturer</th>
+                <th className={thCls} rowSpan={2}>State</th>
+                <th className={thCls} rowSpan={2}>Valid From</th>
+                <th className={thCls} rowSpan={2}>Valid To</th>
+                <th className={thCls} rowSpan={2}>Dealers</th>
+                <th className={thCls} rowSpan={2}>Models</th>
+                <th className={`${thCls} text-center`} colSpan={2}>Loan Amount (₹)</th>
+                <th className={`${thCls} text-center`} colSpan={2}>Tenure</th>
+                <th className={`${thCls} text-center`} colSpan={7}>Rates &amp; Charges</th>
+                <th className={thCls} rowSpan={2}>Payout%</th>
+                <th className={thCls} rowSpan={2}>DMI</th>
+                <th className={thCls} rowSpan={2}>Adv.EMI</th>
+                <th className={thCls} rowSpan={2}>Margin</th>
+              </tr>
+              <tr>
+                <th className={thCls}>Min</th>
+                <th className={thCls}>Max</th>
+                <th className={thCls}>Min</th>
+                <th className={thCls}>Max</th>
+                <th className={thCls}>ROI %</th>
+                <th className={thCls}>PF</th>
+                <th className={thCls}>PDD</th>
+                <th className={thCls}>PFF</th>
+                <th className={thCls}>LMF</th>
+                <th className={thCls}>D.Sub</th>
+                <th className={thCls}>M.Sub</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reviewData.map((r, i) => (
+                <ReadOnlyGridRow
+                  key={r.id}
+                  row={r}
+                  onEdit={() => {
+                    setFormIndex(i)
+                    setStage('form')
+                  }}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Breach reasons */}
+        {breachCount > 0 && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-[#B45309]">
+              {breachCount} promo{breachCount > 1 ? 's' : ''} with margin breach — reason required
             </p>
+            {reviewData.filter(r => r.breached).map(r => (
+              <div key={r.id} className="rounded-card border border-[#E7CFA6] bg-warning-bg/40 p-4">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium text-ink">{name}</span>
+                  <span className="rounded-full bg-cream px-2 py-0.5 text-xs text-muted">{r.schemeName}</span>
+                  <span className="text-xs text-danger font-semibold">Margin {r.margin?.toFixed(1)}% vs bench {r.benchmark}%</span>
+                </div>
+                <label className="block text-xs font-medium text-danger mb-1">
+                  Reason for breach <span aria-hidden>*</span>
+                </label>
+                <input
+                  value={breachReasons[r.id] ?? ''}
+                  onChange={e => setBreachReasons(prev => ({ ...prev, [r.id]: e.target.value }))}
+                  placeholder="e.g. Competitive market rate — approved by Zonal Head"
+                  className={`${inputCls} border-[#E7CFA6] text-sm focus:border-danger/40`}
+                />
+              </div>
+            ))}
           </div>
-          <button
-            onClick={() => setStage('grid')}
-            className="shrink-0 text-sm font-medium text-brand hover:underline"
-          >
-            ← Edit grid
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          {reviewData.map(r => (
-            <div
-              key={r.id}
-              className={`rounded-card border p-4 ${
-                r.breached ? 'border-[#E7CFA6] bg-warning-bg/40' : 'border-border bg-surface'
-              }`}
-            >
-              {/* Card header */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-ink">{name}</span>
-                    <span className="rounded-full bg-cream px-2.5 py-0.5 text-xs text-muted">
-                      {r.schemeName}
-                    </span>
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      r.group === 'Manufacturer' ? 'bg-brand/10 text-brand' : 'bg-[#E8F0FE] text-[#1967D2]'
-                    }`}>
-                      {r.group}
-                    </span>
-                    {r.highPayout && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-[#8B5E00]">
-                        <IconAlert width={10} height={10} /> High payout
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-xs text-muted">
-                    {r.dealerType ?? '—'} · {r.salesPointIds.length} dealer{r.salesPointIds.length !== 1 ? 's' : ''} ·{' '}
-                    {r.modelNames.length} model{r.modelNames.length !== 1 ? 's' : ''} · Rate{' '}
-                    {r.flatRate}%
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted">
-                    Loan ₹{parseInt(r.minAmount).toLocaleString('en-IN')}–₹
-                    {parseInt(r.maxAmount).toLocaleString('en-IN')} · Tenure {r.minTenure}–
-                    {r.maxTenure}m · Payout {r.dealerPayout}%
-                  </div>
-                </div>
-
-                {/* Margin */}
-                <div className="shrink-0 text-right">
-                  {r.margin !== null ? (
-                    <>
-                      <div
-                        className={`text-base font-semibold ${r.breached ? 'text-danger' : 'text-success'}`}
-                      >
-                        {r.margin.toFixed(1)}%
-                      </div>
-                      <div className="text-xs text-muted">bench {r.benchmark}%</div>
-                      <div
-                        className={`mt-0.5 text-xs font-medium ${r.breached ? 'text-danger' : 'text-success'}`}
-                      >
-                        {r.breached ? '✗ breach' : '✓ clear'}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted">Can't calculate</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Charges summary */}
-              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                <span>
-                  PF:{' '}
-                  {r.pfPct !== null
-                    ? `${r.pfPct}%`
-                    : r.pfAmount !== null
-                      ? `₹${r.pfAmount}`
-                      : '—'}
-                </span>
-                <span>
-                  PDD:{' '}
-                  {r.pddPct !== null
-                    ? `${r.pddPct}%`
-                    : r.pddAmount !== null
-                      ? `₹${r.pddAmount}`
-                      : '—'}
-                </span>
-                <span>PFF: ₹{r.pffAmount}</span>
-                <span>LMF: ₹{r.lmfAmount}</span>
-                {r.dmiOn && <span>DMI: ₹{r.dmiAmount || '0'}</span>}
-              </div>
-
-              {/* Breach reason input */}
-              {r.breached && (
-                <div className="mt-3 space-y-1">
-                  <label className="block text-xs font-medium text-danger">
-                    Reason for breach <span aria-hidden>*</span>
-                  </label>
-                  <input
-                    value={breachReasons[r.id] ?? ''}
-                    onChange={e =>
-                      setBreachReasons(prev => ({ ...prev, [r.id]: e.target.value }))
-                    }
-                    placeholder="e.g. Competitive market rate — approved by Zonal Head"
-                    className={`${inputCls} border-[#E7CFA6] text-sm focus:border-danger/40`}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        )}
 
         {/* Review footer */}
         <div className="flex items-center justify-between border-t border-border pt-4">
           <button
-            onClick={() => setStage('grid')}
+            onClick={() => setStage('form')}
             className="text-sm text-muted hover:text-ink"
           >
-            ← Back to grid
+            ← Edit promos
           </button>
           <div className="flex items-center gap-3">
             {!allReasonsFilled && breachCount > 0 && (
@@ -1447,83 +1534,64 @@ function BulkSchemeFlow({
     )
   }
 
-  // ── GRID ──────────────────────────────────────────────────────────────────
+  // ── FORM ──────────────────────────────────────────────────────────────────
 
-  const thCls =
-    'border-b border-border bg-cream/60 px-2 py-2 text-left text-[10px] font-medium uppercase tracking-wide text-muted whitespace-nowrap'
+  const currentRow = rows[formIndex] ?? rows[0]
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-sm font-medium text-ink">
-          Fill in rates for each scheme. Click dealer or model counts to open the picker.
+    <div className="max-w-2xl space-y-6">
+      {/* Progress bar — click a segment to jump to that promo */}
+      <div className="space-y-1.5">
+        <div className="flex gap-1.5">
+          {rows.map((r, i) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => setFormIndex(i)}
+              title={`${r.schemeName} · ${r.group}`}
+              className={`h-2 flex-1 rounded-full transition-colors ${
+                i === formIndex ? 'bg-brand' : rowReady(r) ? 'bg-success/50' : 'bg-border'
+              }`}
+            />
+          ))}
+        </div>
+        <p className="text-xs text-muted">
+          {rows.filter(rowReady).length} of {rows.length} promos complete · click a segment to jump
         </p>
-        <p className="mt-0.5 text-xs text-muted">Margin updates live as you type.</p>
       </div>
 
-      {/* Horizontally-scrollable grid */}
-      <div className="overflow-x-auto rounded-card border border-border">
-        <table className="min-w-max border-collapse text-xs">
-          <thead>
-            {/* Row 1 — group labels */}
-            <tr>
-              <th className={thCls} rowSpan={2}>Scheme</th>
-              <th className={thCls} rowSpan={2}>Type</th>
-              <th className={thCls} rowSpan={2}>Manufacturer</th>
-              <th className={thCls} rowSpan={2}>State</th>
-              <th className={thCls} rowSpan={2}>Valid From</th>
-              <th className={thCls} rowSpan={2}>Valid To</th>
-              <th className={thCls} rowSpan={2}>Dealers</th>
-              <th className={thCls} rowSpan={2}>Models</th>
-              <th className={`${thCls} text-center`} colSpan={2}>Loan Amount (₹)</th>
-              <th className={`${thCls} text-center`} colSpan={2}>Tenure (mo.)</th>
-              <th className={`${thCls} text-center`} colSpan={5}>Rates & Charges</th>
-              <th className={thCls} rowSpan={2} title="Inclusive of GST">Payout%</th>
-              <th className={thCls} rowSpan={2} title="Default margin insurance">DMI</th>
-              <th className={thCls} rowSpan={2} title="Advance EMI value shown in SFDC — no charge impact">Adv.EMI</th>
-              <th className={thCls} rowSpan={2}>Margin</th>
-            </tr>
-            {/* Row 2 — sub-column labels */}
-            <tr>
-              <th className={thCls}>Min</th>
-              <th className={thCls}>Max</th>
-              <th className={thCls}>Min</th>
-              <th className={thCls}>Max</th>
-              <th className={thCls}>ROI %</th>
-              <th className={thCls} title="Processing fee (% or ₹)">PF</th>
-              <th className={thCls} title="Post-disbursement default (% or ₹)">PDD</th>
-              <th className={thCls} title="Pre-funding fee (₹)">PFF</th>
-              <th className={thCls} title="Loan management fee (₹)">LMF</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => (
-              <GridRow
-                key={row.id}
-                row={row}
-                onChange={updateRow}
-                onDealerTypeChange={handleDealerTypeChange}
-                onPickerOpen={(rowId, field) => setActivePicker({ rowId, field })}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PromoForm
+        row={currentRow}
+        index={formIndex}
+        total={rows.length}
+        onChange={updateRow}
+        onPickerOpen={(rowId, field) => setActivePicker({ rowId, field })}
+        onDealerTypeChange={handleDealerTypeChange}
+      />
 
-      {/* Grid footer */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Navigation footer */}
+      <div className="flex items-center justify-between border-t border-border pt-4">
+        <button
+          onClick={() => setFormIndex(f => Math.max(0, f - 1))}
+          disabled={formIndex === 0}
+          className="text-sm text-muted hover:text-ink disabled:cursor-default disabled:opacity-40"
+        >
+          ← Previous
+        </button>
         <div className="flex items-center gap-3">
-          {!gridValid && (
-            <p className="text-xs text-muted">
-              {!nameIsValid
-                ? 'Enter a valid promo name to continue.'
-                : `${readyCount}/${rows.length} rows complete — fill dealers & models to continue.`}
-            </p>
+          {!nameIsValid && (
+            <p className="text-xs text-muted">Enter a valid promo name to continue.</p>
+          )}
+          {formIndex < rows.length - 1 ? (
+            <Button onClick={() => setFormIndex(f => f + 1)}>
+              Next →
+            </Button>
+          ) : (
+            <Button disabled={!gridValid} onClick={() => setStage('review')}>
+              Review {rows.length} promo{rows.length > 1 ? 's' : ''} →
+            </Button>
           )}
         </div>
-        <Button disabled={!gridValid} onClick={() => setStage('review')}>
-          Next: Review →
-        </Button>
       </div>
 
       {/* SBO confirm — switching from MBO with 2+ manufacturers */}
@@ -1566,7 +1634,7 @@ function BulkSchemeFlow({
         </div>
       )}
 
-      {/* All pickers (states, manufacturers, models, dealers) */}
+      {/* Pickers */}
       <PickerPanel
         target={activePicker}
         rows={rows}
@@ -1574,7 +1642,7 @@ function BulkSchemeFlow({
         onApply={applyPicker}
       />
 
-      {/* City panel — opens after state selection (one state at a time) */}
+      {/* City panel */}
       {cityPanelRowId && (() => {
         const row = rows.find(r => r.id === cityPanelRowId)
         if (!row || row.states.length === 0) return null

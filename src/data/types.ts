@@ -58,6 +58,10 @@ export interface PromoDetail {
   pddAmount: number | null
   pffAmount: number
   lmfAmount: number
+  dealerSubventionPct?: number | null
+  dealerSubventionAmt?: number | null
+  mfgSubventionPct?: number | null
+  mfgSubventionAmt?: number | null
   dealerPayout: number // % — inclusive of GST
   dmiOn: boolean
   dmiAmount: number
@@ -94,6 +98,10 @@ export interface PendingEdit {
   pddAmount: number | null
   pffAmount: number | null
   lmfAmount: number | null
+  dealerSubventionPct: number | null
+  dealerSubventionAmt: number | null
+  mfgSubventionPct: number | null
+  mfgSubventionAmt: number | null
   dealerPayout: string
   dmiOn: boolean
   dmiAmount: string
@@ -162,6 +170,10 @@ export interface WizardDraft {
   pddAmount: number | null
   pffAmount: number | null
   lmfAmount: number | null
+  dealerSubventionPct: number | null
+  dealerSubventionAmt: number | null
+  mfgSubventionPct: number | null
+  mfgSubventionAmt: number | null
   dealerPayout: string
   dmiOn: boolean
   dmiAmount: string
