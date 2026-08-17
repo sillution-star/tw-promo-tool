@@ -98,7 +98,7 @@ function breadcrumbFor(
     case 'existing-promos':
       return ['Dashboard', 'Existing Promos']
     case 'edit-promo':
-      return ['Dashboard', 'Existing Promos', `Edit · ${view.promoId}`]
+      return ['Dashboard', 'Existing Promos', `Promo Modification · ${view.promoId}`]
     case 'admin-promo':
       return ['Dashboard', 'Existing Promos', getPromo(view.promoId)?.name ?? view.promoId]
     case 'query-update':

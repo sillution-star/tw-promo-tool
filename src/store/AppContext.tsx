@@ -83,8 +83,9 @@ interface AppState {
   // checker action — send back to maker for corrections (not a formal rejection)
   rework: (promoId: string, reason: string) => void
   getPromo: (id: string) => Promo | undefined
-  // Story 9 — edit a Live promo (Mapping + Rates & Charges)
+  // Story 9 / FR-16 — edit a Live promo
   startEditPromo: (promoId: string) => void
+  applyImmediateEdit: (promoId: string, reach: { states: string[]; cities: string[]; salesPointIds: string[]; modelNames: string[]; validFrom: string; validTo: string }) => void
   submitEdit: (promoId: string, form: WizardDraft) => void
   approveEdit: (promoId: string) => void
   rejectEdit: (promoId: string, reason: string) => void
@@ -383,50 +384,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const startEditPromo = useCallback(
     (promoId: string) => {
-      const p = promos.find((x) => x.id === promoId)
-      if (!p) return
-      const det = p.detail
-      setDraft({
-        id: p.id,
-        editingPromoId: promoId,
-        name: p.name,
-        schemeName: p.scheme,
-        group: p.group,
-        product: p.product ?? null,
-        dealerType: p.dealerType,
-        manufacturer: p.manufacturer,
-        manufacturers: p.manufacturer ? [p.manufacturer] : [],
-        states: det?.states ?? [p.state],
-        cities: det?.cities ?? (p.city ? [p.city] : []),
-        salesPointIds: det?.salesPointIds ?? [],
-        modelNames: det?.modelNames ?? [],
-        minAmount: det ? String(det.minAmount) : '',
-        maxAmount: det ? String(det.maxAmount) : '',
-        minTenure: det?.minTenure ?? null,
-        maxTenure: det?.maxTenure ?? null,
-        flatRate: det ? String(det.flatRate) : '',
-        pfPct: det?.pfPct ?? null,
-        pfAmount: det?.pfAmount ?? null,
-        pddPct: det?.pddPct ?? null,
-        pddAmount: det?.pddAmount ?? null,
-        pffAmount: det?.pffAmount ?? null,
-        lmfAmount: det?.lmfAmount ?? null,
-        dealerSubventionPct: det?.dealerSubventionPct ?? null,
-        dealerSubventionAmt: det?.dealerSubventionAmt ?? null,
-        mfgSubventionPct: det?.mfgSubventionPct ?? null,
-        mfgSubventionAmt: det?.mfgSubventionAmt ?? null,
-        dealerPayout: String(p.dealerPayout),
-        dmiOn: det?.dmiOn ?? false,
-        dmiAmount: det ? String(det.dmiAmount) : '',
-        advanceEmi: det?.advanceEmi ?? 0,
-        breachReason: p.breachReason ?? '',
-        validFrom: det?.validFrom ?? TODAY,
-        validTo: det?.validTo ?? p.expiry ?? '',
-        history: p.history,
-      })
-      setView({ name: 'wizard', step: 1 })
+      navigate({ name: 'edit-promo', promoId })
     },
-    [promos],
+    [navigate],
+  )
+
+  const applyImmediateEdit = useCallback(
+    (promoId: string, reach: { states: string[]; cities: string[]; salesPointIds: string[]; modelNames: string[]; validFrom: string; validTo: string }) => {
+      setPromos((prev) =>
+        prev.map((p) => {
+          if (p.id !== promoId) return p
+          const existingDet = p.detail
+          const newDetail = existingDet
+            ? {
+                ...existingDet,
+                states: reach.states,
+                cities: reach.cities,
+                salesPointIds: reach.salesPointIds,
+                modelNames: reach.modelNames,
+                validFrom: reach.validFrom,
+                validTo: reach.validTo,
+              }
+            : undefined
+          const profit = newDetail ? computeProfit(newDetail) : null
+          return {
+            ...p,
+            state: reach.states[0] ?? p.state,
+            city: reach.cities[0] ?? p.city,
+            salesPointCount: reach.salesPointIds.length || p.salesPointCount,
+            modelCount: reach.modelNames.length || p.modelCount,
+            expiry: reach.validTo || p.expiry,
+            margin: profit?.ok ? +(profit.breakdown!.netPct.toFixed(1)) : p.margin,
+            detail: newDetail,
+            history: [
+              ...p.history,
+              { at: TODAY, event: 'Reach & validity updated', by: CURRENT_USER.admin.name },
+            ],
+          }
+        }),
+      )
+    },
+    [],
   )
 
   const submitEdit = useCallback((promoId: string, form: WizardDraft) => {
@@ -953,6 +951,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rework,
       getPromo,
       startEditPromo,
+      applyImmediateEdit,
       submitEdit,
       approveEdit,
       rejectEdit,
@@ -970,7 +969,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deactivateMasterEntry,
       reactivateMasterEntry,
     }),
-    [role, promos, view, navigate, draft, startNewPromo, editDraft, saveDraftAndExit, submitPromo, approve, reject, undoDecision, revoke, rework, getPromo, startEditPromo, submitEdit, approveEdit, rejectEdit, applyBulkRemaps, deactivate, reactivate, bulkDeactivate, bulkDemap, startClonePromo, queryUpdate, bulkCreatePromos, masters, addMasterEntry, editMasterEntry, deactivateMasterEntry, reactivateMasterEntry],
+    [role, promos, view, navigate, draft, startNewPromo, editDraft, saveDraftAndExit, submitPromo, approve, reject, undoDecision, revoke, rework, getPromo, startEditPromo, applyImmediateEdit, submitEdit, approveEdit, rejectEdit, applyBulkRemaps, deactivate, reactivate, bulkDeactivate, bulkDemap, startClonePromo, queryUpdate, bulkCreatePromos, masters, addMasterEntry, editMasterEntry, deactivateMasterEntry, reactivateMasterEntry],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

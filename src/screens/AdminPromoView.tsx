@@ -131,10 +131,10 @@ export function AdminPromoView({ promoId }: { promoId: string }) {
             </button>
           )}
 
-          {/* Edit — admin only */}
+          {/* Promo Modification — admin only */}
           {isAdmin && promo.status === 'Live' && (
             <Button variant="secondary" onClick={() => startEditPromo(promoId)}>
-              Edit
+              Promo Modification
             </Button>
           )}
 
