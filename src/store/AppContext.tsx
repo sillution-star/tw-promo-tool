@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { BaseMasterEntry, HistoryEntry, MasterKey, MastersState, PendingEdit, Promo, PromoDetail, ProductType, Role, View, WizardDraft } from '../data/types'
+import type { BaseMasterEntry, ChannelType, HistoryEntry, MasterKey, MastersState, PendingEdit, Promo, PromoDetail, Role, View, WizardDraft } from '../data/types'
 import {
   SEED_PROMOS,
   CURRENT_USER,
   APPROVAL_ROUTING,
+  SCHEMES,
   benchmarkForState,
   zoneForState,
   SALES_POINTS,
@@ -24,8 +25,10 @@ export function emptyDraft(): WizardDraft {
   return {
     name: '',
     schemeName: '',
+    schemeNames: [],
+    schemeOverrides: {},
     group: null,
-    product: null,
+    channel: null,
     dealerType: null,
     manufacturer: '',
     manufacturers: [],
@@ -42,6 +45,8 @@ export function emptyDraft(): WizardDraft {
     pfAmount: null,
     pddPct: null,
     pddAmount: null,
+    stampDutyPct: null,
+    stampDutyAmount: null,
     pffAmount: null,
     lmfAmount: null,
     dealerSubventionPct: null,
@@ -74,6 +79,7 @@ interface AppState {
   editDraft: (promoId: string) => void
   saveDraftAndExit: () => void
   submitPromo: () => Promo
+  submitMultiSchemePromos: () => Promo[]
   // checker actions
   approve: (promoId: string) => void
   reject: (promoId: string, reason: string) => void
@@ -106,7 +112,7 @@ interface AppState {
     schemeName: string
     promoName: string
     group: string
-    product?: string | null
+    channel?: string | null
     dealerType: 'SBO' | 'MBO'
     salesPointIds: string[]
     modelNames: string[]
@@ -148,6 +154,8 @@ function draftToDetail(d: WizardDraft) {
     pfAmount: d.pfAmount,
     pddPct: d.pddPct,
     pddAmount: d.pddAmount,
+    stampDutyPct: d.stampDutyPct,
+    stampDutyAmount: d.stampDutyAmount,
     pffAmount: d.pffAmount ?? 0,
     lmfAmount: d.lmfAmount ?? 0,
     dealerSubventionPct: d.dealerSubventionPct ?? null,
@@ -192,8 +200,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: p.id,
         name: p.name,
         schemeName: p.scheme,
+        schemeNames: [],
+        schemeOverrides: {},
         group: p.group,
-        product: p.product ?? null,
+        channel: p.channel ?? null,
         dealerType: p.dealerType,
         manufacturer: p.manufacturer,
         manufacturers: p.manufacturer ? [p.manufacturer] : [],
@@ -210,6 +220,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pfAmount: det?.pfAmount ?? null,
         pddPct: det?.pddPct ?? null,
         pddAmount: det?.pddAmount ?? null,
+        stampDutyPct: det?.stampDutyPct ?? null,
+        stampDutyAmount: det?.stampDutyAmount ?? null,
         pffAmount: det?.pffAmount ?? null,
         lmfAmount: det?.lmfAmount ?? null,
         dealerSubventionPct: det?.dealerSubventionPct ?? null,
@@ -251,7 +263,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         state,
         city: d.cities[0],
         zone: zoneForState(state),
-        product: d.product ?? undefined,
+        channel: d.channel ?? undefined,
         manufacturer: d.manufacturer,
         dealerType: d.dealerType ?? 'SBO',
         salesPointCount: d.salesPointIds.length,
@@ -300,6 +312,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     upsert(promo)
     return promo
   }, [draft, draftToPromo, upsert])
+
+  const submitMultiSchemePromos = useCallback((): Promo[] => {
+    const created: Promo[] = draft.schemeNames.map(schemeName => {
+      const scheme = SCHEMES.find(s => s.name === schemeName)
+      const override = draft.schemeOverrides[schemeName]
+      const d: WizardDraft = {
+        ...draft,
+        schemeName,
+        minAmount: override?.minAmount ?? (scheme ? String(scheme.minAmount) : draft.minAmount),
+        maxAmount: override?.maxAmount ?? (scheme ? String(scheme.maxAmount) : draft.maxAmount),
+        minTenure: override?.minTenure ?? draft.minTenure,
+        maxTenure: override?.maxTenure ?? draft.maxTenure,
+        schemeNames: [],
+        schemeOverrides: {},
+      }
+      const detail = draftToDetail(d)
+      const profit = computeProfit(detail)
+      const state = d.states[0] ?? 'Maharashtra'
+      const payout = parseFloat(d.dealerPayout) || 0
+      const id = `PR-${++idCounter}`
+      const route = APPROVAL_ROUTING[state]
+      const promo: Promo = {
+        id,
+        name: d.name || 'Untitled promo',
+        scheme: schemeName,
+        group: d.group ?? 'Competitive',
+        status: 'Pending',
+        margin: profit.ok ? +(profit.breakdown!.netPct.toFixed(1)) : null,
+        benchmark: benchmarkForState(state),
+        state,
+        city: d.cities[0],
+        zone: zoneForState(state),
+        channel: d.channel ?? undefined,
+        manufacturer: d.manufacturer,
+        dealerType: d.dealerType ?? 'SBO',
+        salesPointCount: d.salesPointIds.length,
+        modelCount: d.modelNames.length,
+        dealerPayout: payout,
+        expiry: detail.validTo || null,
+        createdAt: TODAY,
+        maker: CURRENT_USER.maker.name,
+        approver: profit.breached ? route?.breach : route?.normal,
+        breachReason: profit.breached ? d.breachReason : undefined,
+        highPayout: payout > 5,
+        history: [{ at: TODAY, event: 'Submitted', by: CURRENT_USER.maker.name }],
+        detail,
+      }
+      return promo
+    })
+    setPromos(prev => [...prev, ...created])
+    return created
+  }, [draft])
 
   const approve = useCallback(
     (promoId: string) => {
@@ -457,6 +521,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           pfAmount: form.pfAmount,
           pddPct: form.pddPct,
           pddAmount: form.pddAmount,
+          stampDutyPct: form.stampDutyPct,
+          stampDutyAmount: form.stampDutyAmount,
           pffAmount: form.pffAmount,
           lmfAmount: form.lmfAmount,
           dealerSubventionPct: form.dealerSubventionPct,
@@ -502,6 +568,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               pfAmount: e.pfAmount,
               pddPct: e.pddPct,
               pddAmount: e.pddAmount,
+              stampDutyPct: e.stampDutyPct ?? null,
+              stampDutyAmount: e.stampDutyAmount ?? null,
               pffAmount: e.pffAmount ?? 0,
               lmfAmount: e.lmfAmount ?? 0,
               dealerSubventionPct: e.dealerSubventionPct ?? null,
@@ -592,8 +660,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clonedFromName: p.name,
         name: '',               // must fill — shown highlighted in Review
         schemeName: p.scheme,
+        schemeNames: [],
+        schemeOverrides: {},
         group: p.group,
-        product: p.product ?? null,
+        channel: p.channel ?? null,
         dealerType: p.dealerType,
         manufacturer: p.manufacturer,
         manufacturers: p.manufacturer ? [p.manufacturer] : [],
@@ -610,6 +680,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pfAmount: det?.pfAmount ?? null,
         pddPct: det?.pddPct ?? null,
         pddAmount: det?.pddAmount ?? null,
+        stampDutyPct: det?.stampDutyPct ?? null,
+        stampDutyAmount: det?.stampDutyAmount ?? null,
         pffAmount: det?.pffAmount ?? null,
         lmfAmount: det?.lmfAmount ?? null,
         dealerSubventionPct: det?.dealerSubventionPct ?? null,
@@ -825,7 +897,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       schemeName: string
       promoName: string
       group: string
-      product?: string | null
+      channel?: string | null
       dealerType: 'SBO' | 'MBO'
       salesPointIds: string[]
       modelNames: string[]
@@ -849,7 +921,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: row.promoName,
         scheme: row.schemeName,
         group: row.group as 'Manufacturer' | 'Competitive',
-        product: (row.product as ProductType) ?? undefined,
+        channel: (row.channel as ChannelType) ?? undefined,
         status: 'Pending',
         margin: profit.ok ? +(profit.breakdown!.netPct.toFixed(1)) : null,
         benchmark: benchmarkForState(state),
@@ -944,6 +1016,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editDraft,
       saveDraftAndExit,
       submitPromo,
+      submitMultiSchemePromos,
       approve,
       reject,
       undoDecision,
@@ -969,7 +1042,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deactivateMasterEntry,
       reactivateMasterEntry,
     }),
-    [role, promos, view, navigate, draft, startNewPromo, editDraft, saveDraftAndExit, submitPromo, approve, reject, undoDecision, revoke, rework, getPromo, startEditPromo, applyImmediateEdit, submitEdit, approveEdit, rejectEdit, applyBulkRemaps, deactivate, reactivate, bulkDeactivate, bulkDemap, startClonePromo, queryUpdate, bulkCreatePromos, masters, addMasterEntry, editMasterEntry, deactivateMasterEntry, reactivateMasterEntry],
+    [role, promos, view, navigate, draft, startNewPromo, editDraft, saveDraftAndExit, submitPromo, submitMultiSchemePromos, approve, reject, undoDecision, revoke, rework, getPromo, startEditPromo, applyImmediateEdit, submitEdit, approveEdit, rejectEdit, applyBulkRemaps, deactivate, reactivate, bulkDeactivate, bulkDemap, startClonePromo, queryUpdate, bulkCreatePromos, masters, addMasterEntry, editMasterEntry, deactivateMasterEntry, reactivateMasterEntry],
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

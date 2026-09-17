@@ -15,7 +15,7 @@ export type PromoGroup = 'Manufacturer' | 'Competitive'
 
 export type DealerType = 'SBO' | 'MBO'
 
-export type ProductType = 'New' | 'Used' | 'Refinance' | 'Direct'
+export type ChannelType = 'New' | 'Used' | 'Refinance' | 'Direct'
 
 export interface Scheme {
   id: string
@@ -56,6 +56,8 @@ export interface PromoDetail {
   pfAmount: number | null
   pddPct: number | null
   pddAmount: number | null
+  stampDutyPct?: number | null
+  stampDutyAmount?: number | null
   pffAmount: number
   lmfAmount: number
   dealerSubventionPct?: number | null
@@ -96,6 +98,8 @@ export interface PendingEdit {
   pfAmount: number | null
   pddPct: number | null
   pddAmount: number | null
+  stampDutyPct: number | null
+  stampDutyAmount: number | null
   pffAmount: number | null
   lmfAmount: number | null
   dealerSubventionPct: number | null
@@ -122,7 +126,7 @@ export interface Promo {
   state: string
   city?: string
   zone: 'West' | 'South'
-  product?: ProductType
+  channel?: ChannelType
   manufacturer: string
   dealerType: DealerType
   salesPointCount: number
@@ -142,15 +146,25 @@ export interface Promo {
   editRejectedReason?: string   // set when checker rejects the edit
 }
 
+// Per-scheme editable overrides for multi-scheme batch creation
+export interface SchemeOverride {
+  minAmount: string
+  maxAmount: string
+  minTenure: number | null
+  maxTenure: number | null
+}
+
 // ── Create wizard working draft ──────────────────────────────────────────
 export interface WizardDraft {
   id?: string // existing promo id when editing a draft / resubmitting
   // Step 1 — Promo Details
   name: string
   schemeName: string
+  schemeNames: string[]   // all selected schemes; length > 1 = multi-scheme batch
+  schemeOverrides: Record<string, SchemeOverride>  // per-scheme editable values (multi-scheme)
   group: PromoGroup | null
   // Step 2 — Mapping
-  product: ProductType | null
+  channel: ChannelType | null
   dealerType: DealerType | null
   manufacturer: string
   manufacturers: string[]
@@ -168,6 +182,8 @@ export interface WizardDraft {
   pfAmount: number | null
   pddPct: number | null
   pddAmount: number | null
+  stampDutyPct: number | null
+  stampDutyAmount: number | null
   pffAmount: number | null
   lmfAmount: number | null
   dealerSubventionPct: number | null

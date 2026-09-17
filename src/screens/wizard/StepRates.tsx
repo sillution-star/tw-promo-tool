@@ -2,9 +2,10 @@ import { useEffect } from 'react'
 import { useApp } from '../../store/AppContext'
 import { Field, inputCls } from '../../components/ui/primitives'
 import { IconChevronDown, IconAlert } from '../../components/ui/icons'
-import { CHARGE_OPTIONS } from '../../data/seed'
+import { CHARGE_OPTIONS, SCHEMES } from '../../data/seed'
 import { flatToIRR } from '../../lib/profitability'
-import { ratesErrors, schemeFor } from './validators'
+import { ratesErrors, schemeFor, schemeOverrideErrors } from './validators'
+import type { SchemeOverride } from '../../data/types'
 
 function ChargeSelect({
   label,
@@ -71,16 +72,83 @@ function ChargeSelectTenure({
   )
 }
 
+function SchemeOverrideCard({
+  schemeName,
+  override,
+  onChange,
+}: {
+  schemeName: string
+  override: SchemeOverride
+  onChange: (next: SchemeOverride) => void
+}) {
+  const scheme = schemeFor(schemeName)
+  const errs = schemeOverrideErrors(schemeName, override)
+  const setField = (field: Partial<SchemeOverride>) => onChange({ ...override, ...field })
+
+  return (
+    <div className="rounded-card border border-border bg-surface p-4">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-sm text-ink">{schemeName}</span>
+        {scheme && (
+          <span className="rounded-full border border-border bg-cream/60 px-3 py-0.5 font-mono text-xs text-muted">
+            ROI {scheme.roiMin}% – {scheme.roiMax}% · Read-only
+          </span>
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Field label="Min Amount" error={errs.minAmount} helper={scheme ? `Min ₹${scheme.minAmount.toLocaleString('en-IN')}` : undefined}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+            <input
+              inputMode="numeric"
+              value={override.minAmount}
+              onChange={e => setField({ minAmount: e.target.value.replace(/[^\d]/g, '') })}
+              className={`${inputCls} pl-7 font-mono ${errs.minAmount ? 'border-danger focus:ring-danger/10' : ''}`}
+            />
+          </div>
+        </Field>
+        <Field label="Max Amount" error={errs.maxAmount} helper={scheme ? `Max ₹${scheme.maxAmount.toLocaleString('en-IN')}` : undefined}>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+            <input
+              inputMode="numeric"
+              value={override.maxAmount}
+              onChange={e => setField({ maxAmount: e.target.value.replace(/[^\d]/g, '') })}
+              className={`${inputCls} pl-7 font-mono ${errs.maxAmount ? 'border-danger focus:ring-danger/10' : ''}`}
+            />
+          </div>
+        </Field>
+        <Field label="Min Tenure" helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
+          <ChargeSelectTenure
+            value={override.minTenure}
+            options={scheme?.tenures ?? [12, 18, 24, 36, 48]}
+            onChange={v => setField({ minTenure: v })}
+          />
+        </Field>
+        <Field label="Max Tenure" error={errs.maxTenure} helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
+          <ChargeSelectTenure
+            value={override.maxTenure}
+            options={scheme?.tenures ?? [12, 18, 24, 36, 48]}
+            onChange={v => setField({ maxTenure: v })}
+          />
+        </Field>
+      </div>
+    </div>
+  )
+}
+
 export function StepRates() {
   const { draft, setDraft } = useApp()
   const errors = ratesErrors(draft)
   const scheme = schemeFor(draft.schemeName)
   const payout = parseFloat(draft.dealerPayout)
+  const isMultiScheme = draft.schemeNames.length > 1
 
   const tenureOptions = scheme?.tenures ?? [12, 18, 24, 30, 36, 48]
 
-  // Auto-populate min/max tenure from scheme when scheme changes
+  // Auto-populate tenure from scheme when scheme changes (single-scheme)
   useEffect(() => {
+    if (isMultiScheme) return
     if (!scheme) return
     const tenures = scheme.tenures
     setDraft((d) => ({
@@ -90,77 +158,130 @@ export function StepRates() {
     }))
   }, [draft.schemeName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const avgTenure =
-    draft.minTenure != null && draft.maxTenure != null ? (draft.minTenure + draft.maxTenure) / 2 : null
+  // For multi-scheme: seed schemeOverrides from scheme defaults when selection changes
+  useEffect(() => {
+    if (!isMultiScheme) return
+    setDraft(d => {
+      const next = { ...d.schemeOverrides }
+      d.schemeNames.forEach(name => {
+        if (!next[name]) {
+          const s = SCHEMES.find(sc => sc.name === name)
+          next[name] = {
+            minAmount: s ? String(s.minAmount) : '',
+            maxAmount: s ? String(s.maxAmount) : '',
+            minTenure: s ? s.tenures[0] : null,
+            maxTenure: s ? s.tenures[s.tenures.length - 1] : null,
+          }
+        }
+      })
+      return { ...d, schemeOverrides: next }
+    })
+  }, [draft.schemeNames.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const avgTenure = (() => {
+    if (isMultiScheme) {
+      // Use median tenure across all scheme overrides
+      const allTenures = draft.schemeNames.flatMap(n => {
+        const ov = draft.schemeOverrides[n]
+        if (ov?.minTenure != null && ov?.maxTenure != null) return [(ov.minTenure + ov.maxTenure) / 2]
+        return []
+      })
+      if (allTenures.length === 0) return null
+      return allTenures.reduce((a, b) => a + b, 0) / allTenures.length
+    }
+    return draft.minTenure != null && draft.maxTenure != null ? (draft.minTenure + draft.maxTenure) / 2 : null
+  })()
   const irr = draft.flatRate && avgTenure ? flatToIRR(parseFloat(draft.flatRate), avgTenure) : null
+
+  const setOverride = (schemeName: string, ov: SchemeOverride) => {
+    setDraft(d => ({ ...d, schemeOverrides: { ...d.schemeOverrides, [schemeName]: ov } }))
+  }
 
   return (
     <div className="max-w-2xl space-y-8 animate-rise">
       {/* Group A — Loan & Rate */}
       <section className="rounded-card border border-border bg-surface p-6">
         <h2 className="font-medium text-ink">Loan &amp; Rate</h2>
-        {scheme && (
-          <p className="mt-1 text-xs text-muted">
-            {scheme.name}: ₹{scheme.minAmount.toLocaleString('en-IN')} – ₹{scheme.maxAmount.toLocaleString('en-IN')}
-          </p>
-        )}
 
-        {/* Min / Max ROI — read-only, auto-populated from Finnone */}
-        {scheme && (
-          <div className="mt-4 flex items-center gap-6 rounded-input border border-border bg-cream/60 px-4 py-3">
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted">Min ROI (Finnone)</div>
-              <div className="mt-0.5 font-mono text-sm font-semibold text-ink">{scheme.roiMin}%</div>
-            </div>
-            <div className="h-8 w-px bg-border" />
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted">Max ROI (Finnone)</div>
-              <div className="mt-0.5 font-mono text-sm font-semibold text-ink">{scheme.roiMax}%</div>
-            </div>
-            <div className="ml-auto text-xs italic text-muted">Auto-populated · Read-only</div>
+        {isMultiScheme ? (
+          /* Multi-scheme: one editable card per scheme */
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-muted">
+              Each scheme has its own loan range and tenures. ROI is auto-populated from Finnone and locked.
+            </p>
+            {draft.schemeNames.map(name => (
+              <SchemeOverrideCard
+                key={name}
+                schemeName={name}
+                override={draft.schemeOverrides[name] ?? { minAmount: '', maxAmount: '', minTenure: null, maxTenure: null }}
+                onChange={ov => setOverride(name, ov)}
+              />
+            ))}
           </div>
+        ) : (
+          /* Single-scheme: ROI info box + editable amount + tenure fields */
+          <>
+            {scheme && (
+              <>
+                <p className="mt-1 text-xs text-muted">
+                  {scheme.name}: ₹{scheme.minAmount.toLocaleString('en-IN')} – ₹{scheme.maxAmount.toLocaleString('en-IN')}
+                </p>
+                <div className="mt-4 flex items-center gap-6 rounded-input border border-border bg-cream/60 px-4 py-3">
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted">Min ROI (Finnone)</div>
+                    <div className="mt-0.5 font-mono text-sm font-semibold text-ink">{scheme.roiMin}%</div>
+                  </div>
+                  <div className="h-8 w-px bg-border" />
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted">Max ROI (Finnone)</div>
+                    <div className="mt-0.5 font-mono text-sm font-semibold text-ink">{scheme.roiMax}%</div>
+                  </div>
+                  <div className="ml-auto text-xs italic text-muted">Auto-populated · Read-only</div>
+                </div>
+              </>
+            )}
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              <Field label="Min Amount Financed" error={errors.minAmount}>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+                  <input
+                    inputMode="numeric"
+                    value={draft.minAmount}
+                    onChange={(e) => setDraft((d) => ({ ...d, minAmount: e.target.value.replace(/[^\d]/g, '') }))}
+                    className={`${inputCls} pl-7 font-mono ${errors.minAmount ? 'border-danger focus:ring-danger/10' : ''}`}
+                  />
+                </div>
+              </Field>
+              <Field label="Max Amount Financed" error={errors.maxAmount}>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
+                  <input
+                    inputMode="numeric"
+                    value={draft.maxAmount}
+                    onChange={(e) => setDraft((d) => ({ ...d, maxAmount: e.target.value.replace(/[^\d]/g, '') }))}
+                    className={`${inputCls} pl-7 font-mono ${errors.maxAmount ? 'border-danger focus:ring-danger/10' : ''}`}
+                  />
+                </div>
+              </Field>
+              <Field label="Min Tenure" helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
+                <ChargeSelectTenure
+                  value={draft.minTenure}
+                  options={tenureOptions}
+                  onChange={(v) => setDraft((d) => ({ ...d, minTenure: v }))}
+                />
+              </Field>
+              <Field label="Max Tenure" error={errors.maxTenure} helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
+                <ChargeSelectTenure
+                  value={draft.maxTenure}
+                  options={tenureOptions}
+                  onChange={(v) => setDraft((d) => ({ ...d, maxTenure: v }))}
+                />
+              </Field>
+            </div>
+          </>
         )}
-
-        <div className="mt-5 grid grid-cols-2 gap-4">
-          <Field label="Min Amount Financed" error={errors.minAmount}>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
-              <input
-                inputMode="numeric"
-                value={draft.minAmount}
-                onChange={(e) => setDraft((d) => ({ ...d, minAmount: e.target.value.replace(/[^\d]/g, '') }))}
-                className={`${inputCls} pl-7 font-mono ${errors.minAmount ? 'border-danger focus:ring-danger/10' : ''}`}
-              />
-            </div>
-          </Field>
-          <Field label="Max Amount Financed" error={errors.maxAmount}>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">₹</span>
-              <input
-                inputMode="numeric"
-                value={draft.maxAmount}
-                onChange={(e) => setDraft((d) => ({ ...d, maxAmount: e.target.value.replace(/[^\d]/g, '') }))}
-                className={`${inputCls} pl-7 font-mono ${errors.maxAmount ? 'border-danger focus:ring-danger/10' : ''}`}
-              />
-            </div>
-          </Field>
-          <Field label="Min Tenure" helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
-            <ChargeSelectTenure
-              value={draft.minTenure}
-              options={tenureOptions}
-              onChange={(v) => setDraft((d) => ({ ...d, minTenure: v }))}
-            />
-          </Field>
-          <Field label="Max Tenure" error={errors.maxTenure} helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
-            <ChargeSelectTenure
-              value={draft.maxTenure}
-              options={tenureOptions}
-              onChange={(v) => setDraft((d) => ({ ...d, maxTenure: v }))}
-            />
-          </Field>
-        </div>
-
-        <div className="mt-4 max-w-xs">
+        {/* Flat rate + IRR — shared across all schemes */}
+        <div className="mt-4 grid max-w-sm grid-cols-2 gap-4">
           <Field label="Flat Rate">
             <div className="relative">
               <input
@@ -172,9 +293,15 @@ export function StepRates() {
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
             </div>
           </Field>
-          <p className="mt-2 text-sm text-muted">
-            True rate (IRR): <span className="font-mono">{irr != null ? `${irr.toFixed(1)}%` : '—'}</span>
-          </p>
+          <Field label="IRR">
+            <div className="relative">
+              <div className={`${inputCls} cursor-default bg-cream/60 pr-8 font-mono text-muted`}>
+                {irr != null ? irr.toFixed(2) : '—'}
+              </div>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
+            </div>
+            <p className="mt-1 text-[10px] text-muted">Auto-calculated · Read-only</p>
+          </Field>
         </div>
       </section>
 
@@ -224,6 +351,28 @@ export function StepRates() {
                 value={draft.pddAmount}
                 disabled={draft.pddPct !== null}
                 onChange={(v) => setDraft((d) => ({ ...d, pddAmount: v, pddPct: null }))}
+              />
+            </div>
+          </Field>
+
+          {/* Stamp Duty */}
+          <Field label="Stamp Duty" helper="Choose percentage or amount — not both.">
+            <div className="grid grid-cols-2 gap-4">
+              <ChargeSelect
+                label="Stamp Duty %"
+                unit="%"
+                options={CHARGE_OPTIONS.stampDutyPct}
+                value={draft.stampDutyPct}
+                disabled={draft.stampDutyAmount !== null}
+                onChange={(v) => setDraft((d) => ({ ...d, stampDutyPct: v, stampDutyAmount: null }))}
+              />
+              <ChargeSelect
+                label="Stamp Duty Amt"
+                unit="₹"
+                options={CHARGE_OPTIONS.stampDutyAmount}
+                value={draft.stampDutyAmount}
+                disabled={draft.stampDutyPct !== null}
+                onChange={(v) => setDraft((d) => ({ ...d, stampDutyAmount: v, stampDutyPct: null }))}
               />
             </div>
           </Field>

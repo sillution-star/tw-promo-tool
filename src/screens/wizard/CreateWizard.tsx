@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useApp } from '../../store/AppContext'
 import { Button } from '../../components/ui/primitives'
 import { IconCheck, IconAlert } from '../../components/ui/icons'
@@ -48,7 +47,6 @@ function StepIndicator({ current, editMode }: { current: number; editMode?: bool
 
 export function CreateWizard({ step }: { step: number }) {
   const { draft, promos, navigate, saveDraftAndExit } = useApp()
-  const [bulkMode, setBulkMode] = useState(false)
 
   const isEditMode = !!draft.editingPromoId
   const isCloneMode = !!draft.clonedFromId
@@ -115,14 +113,14 @@ export function CreateWizard({ step }: { step: number }) {
         </div>
       )}
 
-      {step === 1 && <StepPromoDetails onBulkModeChange={setBulkMode} />}
+      {step === 1 && <StepPromoDetails />}
       {step === 2 && <StepMapping />}
       {step === 3 && <StepRates />}
       {step === 4 && <StepProfitability />}
       {step === 5 && <StepReview onEdit={goTo} />}
 
-      {/* Footer (steps 1–4; hidden in bulk mode; Review carries its own actions) */}
-      {step < 5 && !bulkMode && (
+      {/* Footer (steps 1–4; Review carries its own actions) */}
+      {step < 5 && (
         <div className="fixed bottom-0 left-[248px] right-0 z-10 flex items-center justify-between border-t border-border bg-cream/90 px-8 py-4 backdrop-blur">
           <div>
             {step > 1 && (

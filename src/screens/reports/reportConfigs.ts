@@ -99,7 +99,7 @@ const promoMaster: ReportConfig = {
     // Identity
     { key: 'id',            label: 'Promo ID',         type: 'text',     group: G.ID   },
     { key: 'name',          label: 'Promo Name',       type: 'text',     group: G.ID   },
-    { key: 'product',       label: 'Product',          type: 'text',     group: G.ID   },
+    { key: 'channel',       label: 'Channel',          type: 'text',     group: G.ID   },
     { key: 'promoGroup',    label: 'Promo Group',      type: 'text',     group: G.ID   },
     { key: 'scheme',        label: 'Scheme',           type: 'text',     group: G.ID   },
     // Status & Dates
@@ -159,7 +159,7 @@ const promoMaster: ReportConfig = {
       const submitted = [...p.history].reverse().find(h => h.event === 'Submitted' || h.event === 'Resubmitted')
       const approved  = p.history.find(h => h.event === 'Approved')
       return {
-        id: p.id, name: p.name, product: p.product ?? '—',
+        id: p.id, name: p.name, channel: p.channel ?? '—',
         promoGroup: p.group, scheme: p.scheme,
         status: p.status,
         validFrom: p.detail?.validFrom ?? null,

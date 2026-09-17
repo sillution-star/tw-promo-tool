@@ -116,6 +116,8 @@ export const CHARGE_OPTIONS = {
   pfAmount: [0, 500, 1000, 1500, 2000],
   pddPct: [0, 0.5, 1, 1.5],
   pddAmount: [0, 250, 500, 750],
+  stampDutyPct: [0, 0.5, 1, 1.5],
+  stampDutyAmount: [0, 250, 500, 750],
   pffAmount: [0, 500, 1000, 1500],
   lmfAmount: [0, 300, 600, 900],
   subventionPct: [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5],

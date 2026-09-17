@@ -60,15 +60,17 @@ function AttentionInput({
 }
 
 export function StepReview({ onEdit }: { onEdit: (step: number) => void }) {
-  const { draft, setDraft, promos, navigate, submitPromo, submitEdit } = useApp()
+  const { draft, setDraft, promos, navigate, submitPromo, submitMultiSchemePromos, submitEdit } = useApp()
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState<Promo | null>(null)
+  const [multiDone, setMultiDone] = useState<Promo[] | null>(null)
   const [editDone, setEditDone] = useState(false)
   const [reachOpen, setReachOpen] = useState(false)
   const [proceedAnyway, setProceedAnyway] = useState(false)
 
   const isEditMode = !!draft.editingPromoId
   const isCloneMode = !!draft.clonedFromId
+  const isMultiScheme = draft.schemeNames.length > 1
 
   const payout = parseFloat(draft.dealerPayout) || 0
   const avgTenure = ((draft.minTenure ?? 0) + (draft.maxTenure ?? 0)) / 2
@@ -138,6 +140,10 @@ export function StepReview({ onEdit }: { onEdit: (step: number) => void }) {
         submitEdit(draft.editingPromoId!, draft)
         setSubmitting(false)
         setEditDone(true)
+      } else if (isMultiScheme) {
+        const promoList = submitMultiSchemePromos()
+        setSubmitting(false)
+        setMultiDone(promoList)
       } else {
         const promo = submitPromo()
         setSubmitting(false)
@@ -161,6 +167,35 @@ export function StepReview({ onEdit }: { onEdit: (step: number) => void }) {
         <div className="mt-7 flex justify-center gap-3">
           <Button variant="secondary" onClick={() => navigate({ name: 'existing-promos' })}>
             Back to Existing Promos
+          </Button>
+          <Button onClick={() => navigate({ name: 'inbox', tab: 'Pending' })}>Go to Inbox</Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Multi-scheme success ──
+  if (multiDone) {
+    return (
+      <div className="mx-auto max-w-md py-12 text-center animate-rise">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success-bg text-success">
+          <IconCheck width={28} height={28} />
+        </div>
+        <h2 className="mt-5 font-serif text-3xl text-ink">
+          {multiDone.length} promos submitted
+        </h2>
+        <p className="mt-2 text-muted">Each promo is tracked and approved independently.</p>
+        <div className="mx-auto mt-5 max-w-xs space-y-1.5 text-left">
+          {multiDone.map(p => (
+            <div key={p.id} className="flex items-center justify-between rounded-input border border-border bg-surface px-3 py-2 text-sm">
+              <span className="font-mono text-xs text-muted">{p.id}</span>
+              <span className="font-medium text-ink">{p.scheme}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-7 flex justify-center gap-3">
+          <Button variant="secondary" onClick={() => navigate({ name: 'dashboard' })}>
+            Back to Dashboard
           </Button>
           <Button onClick={() => navigate({ name: 'inbox', tab: 'Pending' })}>Go to Inbox</Button>
         </div>
@@ -291,7 +326,13 @@ export function StepReview({ onEdit }: { onEdit: (step: number) => void }) {
         ) : (
           <>
             <Row label="Name">{draft.name}</Row>
-            <Row label="Scheme">{draft.schemeName}</Row>
+            {isMultiScheme ? (
+              <Row label={`Schemes (${draft.schemeNames.length})`}>
+                <span className="text-right text-xs leading-relaxed">{draft.schemeNames.join(' · ')}</span>
+              </Row>
+            ) : (
+              <Row label="Scheme">{draft.schemeName}</Row>
+            )}
             <Row label="Promo group">{draft.group} Scheme</Row>
           </>
         )}

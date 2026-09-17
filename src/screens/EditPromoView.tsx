@@ -39,8 +39,10 @@ function initCommercialForm(promo: Promo): WizardDraft {
     id: promo.id,
     name: promo.name,
     schemeName: promo.scheme,
+    schemeNames: [],
+    schemeOverrides: {},
     group: promo.group,
-    product: promo.product ?? null,
+    channel: promo.channel ?? null,
     dealerType: promo.dealerType,
     manufacturer: promo.manufacturer,
     manufacturers: promo.manufacturer ? [promo.manufacturer] : [],
@@ -57,6 +59,8 @@ function initCommercialForm(promo: Promo): WizardDraft {
     pfAmount: det?.pfAmount ?? null,
     pddPct: det?.pddPct ?? null,
     pddAmount: det?.pddAmount ?? null,
+    stampDutyPct: det?.stampDutyPct ?? null,
+    stampDutyAmount: det?.stampDutyAmount ?? null,
     pffAmount: det?.pffAmount ?? null,
     lmfAmount: det?.lmfAmount ?? null,
     dealerSubventionPct: det?.dealerSubventionPct ?? null,
@@ -131,6 +135,7 @@ function ProfitWidget({ form, benchmark, promo }: { form: WizardDraft; benchmark
     flatRate: parseFloat(form.flatRate) || 0,
     pfPct: form.pfPct, pfAmount: form.pfAmount,
     pddPct: form.pddPct, pddAmount: form.pddAmount,
+    stampDutyPct: form.stampDutyPct ?? null, stampDutyAmount: form.stampDutyAmount ?? null,
     pffAmount: form.pffAmount ?? 0, lmfAmount: form.lmfAmount ?? 0,
     dealerPayout: parseFloat(form.dealerPayout) || 0,
     dmiOn: form.dmiOn, dmiAmount: parseFloat(form.dmiAmount) || 0,
@@ -331,6 +336,7 @@ export function EditPromoView({ promoId }: { promoId: string }) {
     flatRate: parseFloat(commercial.flatRate) || 0,
     pfPct: commercial.pfPct, pfAmount: commercial.pfAmount,
     pddPct: commercial.pddPct, pddAmount: commercial.pddAmount,
+    stampDutyPct: commercial.stampDutyPct ?? null, stampDutyAmount: commercial.stampDutyAmount ?? null,
     pffAmount: commercial.pffAmount ?? 0, lmfAmount: commercial.lmfAmount ?? 0,
     dealerPayout: payout || 0, dmiOn: commercial.dmiOn,
     dmiAmount: parseFloat(commercial.dmiAmount) || 0,
@@ -718,6 +724,16 @@ export function EditPromoView({ promoId }: { promoId: string }) {
                   <ChargeSelect label="PDD Amount" unit="₹" options={CHARGE_OPTIONS.pddAmount}
                     value={commercial.pddAmount} disabled={commercial.pddPct !== null}
                     onChange={(v) => setCommercial((d) => ({ ...d, pddAmount: v, pddPct: null }))} />
+                </div>
+              </Field>
+              <Field label="Stamp Duty" helper="Choose percentage or amount — not both.">
+                <div className="grid grid-cols-2 gap-4">
+                  <ChargeSelect label="Stamp Duty %" unit="%" options={CHARGE_OPTIONS.stampDutyPct}
+                    value={commercial.stampDutyPct ?? null} disabled={commercial.stampDutyAmount !== null}
+                    onChange={(v) => setCommercial((d) => ({ ...d, stampDutyPct: v, stampDutyAmount: null }))} />
+                  <ChargeSelect label="Stamp Duty Amt" unit="₹" options={CHARGE_OPTIONS.stampDutyAmount}
+                    value={commercial.stampDutyAmount ?? null} disabled={commercial.stampDutyPct !== null}
+                    onChange={(v) => setCommercial((d) => ({ ...d, stampDutyAmount: v, stampDutyPct: null }))} />
                 </div>
               </Field>
               <div className="grid grid-cols-2 gap-4">

@@ -14,12 +14,13 @@ export function nameTaken(name: string, promos: Promo[], selfId?: string): boole
 
 export function step1Valid(d: WizardDraft, promos: Promo[]): boolean {
   const n = d.name.trim()
+  const hasScheme = d.schemeNames.length > 0 || !!d.schemeName
   return (
-    !!d.product &&
+    !!d.channel &&
     n.length > 0 &&
     n.length <= 100 &&
     !nameTaken(d.name, promos, d.id) &&
-    !!d.schemeName &&
+    hasScheme &&
     !!d.group
   )
 }
@@ -52,20 +53,47 @@ export function ratesErrors(d: WizardDraft): Record<string, string> {
   return e
 }
 
+export function schemeOverrideErrors(
+  schemeName: string,
+  override: { minAmount: string; maxAmount: string; minTenure: number | null; maxTenure: number | null },
+): Record<string, string> {
+  const e: Record<string, string> = {}
+  const scheme = schemeFor(schemeName)
+  const min = parseFloat(override.minAmount)
+  const max = parseFloat(override.maxAmount)
+  if (override.minAmount && scheme && min < scheme.minAmount)
+    e.minAmount = `Min for this scheme is ₹${scheme.minAmount.toLocaleString('en-IN')}.`
+  if (override.maxAmount && scheme && max > scheme.maxAmount)
+    e.maxAmount = `Max for this scheme is ₹${scheme.maxAmount.toLocaleString('en-IN')}.`
+  if (override.minAmount && override.maxAmount && min >= max)
+    e.maxAmount = 'Max must be greater than Min.'
+  if (override.minTenure != null && override.maxTenure != null && override.minTenure >= override.maxTenure)
+    e.maxTenure = 'Max tenure must be greater than Min.'
+  return e
+}
+
 export function step3Valid(d: WizardDraft): boolean {
-  if (Object.keys(ratesErrors(d)).length > 0) return false
-  const filled =
-    !!d.minAmount &&
-    !!d.maxAmount &&
-    d.minTenure != null &&
-    d.maxTenure != null &&
+  const isMultiScheme = d.schemeNames.length > 1
+  if (isMultiScheme) {
+    // For multi-scheme: each scheme needs valid overrides; shared charges must be filled
+    const allOverridesValid = d.schemeNames.every(schemeName => {
+      const ov = d.schemeOverrides[schemeName]
+      if (!ov || !ov.minAmount || !ov.maxAmount || ov.minTenure == null || ov.maxTenure == null) return false
+      return Object.keys(schemeOverrideErrors(schemeName, ov)).length === 0
+    })
+    if (!allOverridesValid) return false
+  } else {
+    if (Object.keys(ratesErrors(d)).length > 0) return false
+    if (!d.minAmount || !d.maxAmount || d.minTenure == null || d.maxTenure == null) return false
+  }
+  return (
     !!d.flatRate &&
     (d.pfPct != null || d.pfAmount != null) &&
     (d.pddPct != null || d.pddAmount != null) &&
     d.pffAmount != null &&
     d.lmfAmount != null &&
     !!d.dealerPayout
-  return filled
+  )
 }
 
 export function step4Valid(d: WizardDraft): boolean {
