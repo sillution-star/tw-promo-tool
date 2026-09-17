@@ -87,14 +87,7 @@ function SchemeOverrideCard({
 
   return (
     <div className="rounded-card border border-border bg-surface p-4">
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-sm text-ink">{schemeName}</span>
-        {scheme && (
-          <span className="rounded-full border border-border bg-cream/60 px-3 py-0.5 font-mono text-xs text-muted">
-            ROI {scheme.roiMin}% – {scheme.roiMax}% · Read-only
-          </span>
-        )}
-      </div>
+      <span className="font-medium text-sm text-ink">{schemeName}</span>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <Field label="Min Amount" error={errs.minAmount} helper={scheme ? `Min ₹${scheme.minAmount.toLocaleString('en-IN')}` : undefined}>
           <div className="relative">
@@ -116,6 +109,22 @@ function SchemeOverrideCard({
               onChange={e => setField({ maxAmount: e.target.value.replace(/[^\d]/g, '') })}
               className={`${inputCls} pl-7 font-mono ${errs.maxAmount ? 'border-danger focus:ring-danger/10' : ''}`}
             />
+          </div>
+        </Field>
+        <Field label="Min ROI" helper="Auto-populated · Read-only">
+          <div className="relative">
+            <div className={`${inputCls} cursor-default bg-cream/60 pr-8 font-mono text-muted`}>
+              {scheme ? scheme.roiMin : '—'}
+            </div>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
+          </div>
+        </Field>
+        <Field label="Max ROI" helper="Auto-populated · Read-only">
+          <div className="relative">
+            <div className={`${inputCls} cursor-default bg-cream/60 pr-8 font-mono text-muted`}>
+              {scheme ? scheme.roiMax : '—'}
+            </div>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
           </div>
         </Field>
         <Field label="Min Tenure" helper={scheme ? `Allowed: ${scheme.tenures.join(', ')} mo.` : undefined}>
